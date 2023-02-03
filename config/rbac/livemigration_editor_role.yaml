@@ -1,0 +1,31 @@
+# permissions for end users to edit livemigrations.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  labels:
+    app.kubernetes.io/name: clusterrole
+    app.kubernetes.io/instance: livemigration-editor-role
+    app.kubernetes.io/component: rbac
+    app.kubernetes.io/created-by: live-migration-operator
+    app.kubernetes.io/part-of: live-migration-operator
+    app.kubernetes.io/managed-by: kustomize
+  name: livemigration-editor-role
+rules:
+- apiGroups:
+  - livemigration.liqo.io
+  resources:
+  - livemigrations
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - livemigration.liqo.io
+  resources:
+  - livemigrations/status
+  verbs:
+  - get
