@@ -18,10 +18,6 @@ type LivemigrationEndpoint struct {
 	client client.Client
 }
 
-func NewLivemigrationEndpoint(client client.Client) *LivemigrationEndpoint {
-	return &LivemigrationEndpoint{client: client}
-}
-
 func (pe *LivemigrationEndpoint) SetupWithWS(ws *restful.WebService) {
 	ws.Route(ws.GET("Livemigrations").To(pe.list).
 		Doc("List of Livemigrations").
@@ -32,6 +28,10 @@ func (pe *LivemigrationEndpoint) SetupWithWS(ws *restful.WebService) {
 		Reads(&Livemigration{}).
 		Returns(200, "OK", &Livemigration{}).
 		Returns(400, "Bad Request", nil))
+}
+
+func NewLivemigrationEndpoint(client client.Client) *LivemigrationEndpoint {
+	return &LivemigrationEndpoint{client: client}
 }
 
 func (pe *LivemigrationEndpoint) list(request *restful.Request, response *restful.Response) {

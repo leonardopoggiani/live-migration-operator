@@ -7,6 +7,7 @@ initialize the cache properly and in the end handle the termination signals.
 */
 
 import (
+	"context"
 	"time"
 
 	"k8s.io/apimachinery/pkg/runtime"
@@ -68,16 +69,9 @@ func NewManager(config *rest.Config, options Options) (Manager, error) {
 
 	stop := make(chan struct{})
 	return &manager{
-		config: config,
-		cache:  cc,
-		client: &client.DelegatingClient{
-			Reader: &client.DelegatingReader{
-				CacheReader:  cc,
-				ClientReader: c,
-			},
-			Writer:       c,
-			StatusClient: c,
-		},
+		config:          config,
+		cache:           cc,
+		client:          c,
 		internalStop:    stop,
 		internalStopper: stop,
 		port:            options.Port,
@@ -111,17 +105,18 @@ func (m *manager) Start(stop <-chan struct{}) error {
 }
 
 func (m *manager) waitForCache() {
+	ctx := context.Background()
 	if m.started {
 		return
 	}
 
 	go func() {
-		if err := m.cache.Start(m.internalStop); err != nil {
+		if err := m.cache.Start(ctx); err != nil {
 			m.errSignal.SignalError(err)
 		}
 	}()
 
 	// Wait for the caches to sync.
-	m.cache.WaitForCacheSync(m.internalStop)
+	m.cache.WaitForCacheSync(ctx)
 	m.started = true
 }

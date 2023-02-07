@@ -1,0 +1,21 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: video
+  labels:
+    app: video
+  #annotations:
+    #snapshotPolicy: "checkpoint"
+    #snapshotPath: "/var/lib/kubelet/migration/abc"
+spec:
+  containers:
+  - name: vlc
+    image: ghcr.io/galexrt/vlc:main
+    ports:
+    - containerPort: 8080
+      protocol: TCP
+    #args: ["big_buck_bunny.mp4","--loop","--sout", "#transcode{scodec=none}:http{mux=ffmpeg{mux=flv},dst=:8080/}"]
+    args: ["/home/GitHub/live-migration-operator/config/samples/migration-example://usr/bin/vlc", "video.mp4","--loop","--sout", "#transcode{scodec=none}:http{mux=ffmpeg{mux=flv},dst=:8080/}"]
+
+  nodeSelector:
+    kubernetes.io/hostname: rome-worker

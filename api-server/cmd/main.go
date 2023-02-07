@@ -1,12 +1,11 @@
 package main
 
 import (
+	"flag"
+	livemigrationv1 "github.com/leonardopoggiani/live-migration-operator/api/v1alpha1"
+	"github.com/leonardopoggiani/live-migration-operator/controllers"
 	"k8s.io/klog/v2"
 	"os"
-	"sigs.k8s.io/controller-runtime/pkg/manager/signals"
-
-	apiserver "github.com/leonardopoggiani/live-migration-operator/api-server"
-	livemigrationv1 "github.com/leonardopoggiani/live-migration-operator/api/v1alpha1"
 
 	"k8s.io/apimachinery/pkg/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
@@ -28,25 +27,41 @@ func init() {
 }
 
 func main() {
-	kubelog.SetLogger(zap.New(zap.UseDevMode(true)))
+	var metricsAddr string
+	var enableLeaderElection bool
+	flag.StringVar(&metricsAddr, "metrics-addr", ":8082", "The address the metric endpoint binds to.")
+	flag.BoolVar(&enableLeaderElection, "enable-leader-election", false,
+		"Enable leader election for controller manager. "+
+			"Enabling this will ensure there is only one active controller manager.")
+	flag.Parse()
 
-	mgr, err := apiserver.NewManager(ctrl.GetConfigOrDie(), apiserver.Options{
-		Scheme:         scheme,
-		Port:           5000,
-		AllowedDomains: []string{},
+	ctrl.SetLogger(zap.New(zap.UseDevMode(true)))
+
+	klog.Infof("Creating the LiveMigration controller manager")
+
+	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
+		Scheme:             scheme,
+		MetricsBindAddress: metricsAddr,
+		Port:               9443,
+		LeaderElection:     enableLeaderElection,
+		LeaderElectionID:   "a9ee352c.livemigration.liqo.io",
 	})
 	if err != nil {
-		runLog.Error(err, "unable to create api-server manager")
 		os.Exit(1)
 	}
 
-	runLog.Info("starting api-server manager")
+	klog.Infof("Starting the LiveMigration controller manager")
 
-	ctx := signals.SetupSignalHandler()
-	if err != nil {
-		klog.ErrorS(err, "problem running api-server manager")
+	if err = (&controllers.LiveMigrationReconciler{
+		Client: mgr.GetClient(),
+		Scheme: mgr.GetScheme(),
+	}).SetupWithManager(mgr); err != nil {
+		os.Exit(1)
+	}
+	// +kubebuilder:scaffold:builder
+
+	if err := mgr.Start(ctrl.SetupSignalHandler()); err != nil {
 		os.Exit(1)
 	}
 
-	mgr.Start(ctx)
 }

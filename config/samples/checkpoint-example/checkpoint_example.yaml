@@ -1,0 +1,22 @@
+# apiVersion: podmig.dcn.ssu.ac.kr/v1
+# kind: Podmigration
+# metadata:
+#   name: podmigration-sample
+# spec:
+#   # Add fields here
+#   foo: bar
+apiVersion: podmig.dcn.ssu.ac.kr/v1
+kind: Podmigration
+metadata:
+  name: test
+  labels:
+    name: test
+spec:
+  replicas: 1
+  action: checkpoint
+  # sourcePod is name of a running Pod in the system
+  sourcePod: simple
+  # snapshotPath is a path where the checkpoint information will be store
+  snapshotPath: /var/lib/kubelet/migration/ctconf2020
+  selector:
+    podmig: dcn

@@ -5,7 +5,7 @@ import (
 	// "fmt"
 	// "strings"
 
-	"github.com/emicklei/go-restful"
+	"github.com/emicklei/go-restful/v3"
 	v1 "github.com/leonardopoggiani/live-migration-operator/api/v1alpha1"
 
 	corev1 "k8s.io/api/core/v1"
