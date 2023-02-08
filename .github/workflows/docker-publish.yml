@@ -16,12 +16,6 @@ jobs:
         name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v2
       -
-        name: Login to Docker Hub
-        uses: docker/login-action@v2
-        with:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
-      -
         name: Login to GitHub Container Registry
         uses: docker/login-action@v2
         with:
@@ -36,10 +30,8 @@ jobs:
           platforms: linux/amd64,linux/arm64
           push: true
           tags: |
-            user/app:latest
-            user/app:1.0.0
-            ghcr.io/user/app:latest
-            ghcr.io/user/app:1.0.0
+            ghcr.io/leonardopoggiani/live-migration-operator:latest
+            ghcr.io/leonardopoggiani/live-migration-operator:1.0.0
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
