@@ -1,0 +1,8 @@
+apiVersion: network.kubesphere.io/v1alpha2
+kind: Eip
+metadata:
+  name: layer2-eip
+spec:
+  address: 172.17.255.1-172.17.255.250
+  interface: eth0
+  protocol: layer2

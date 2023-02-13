@@ -1,11 +1,15 @@
-FROM ubuntu
+# Immagine di partenza
+FROM ubuntu:latest
 
-RUN apt-get update \
-&& apt-get install -y vlc
+# Installare VLC
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends vlc vlc-plugins-*
 
-RUN useradd -m vlcuser
+# Copiare il file video.mp4 nella directory di lavoro
+COPY video.mp4 /app/video.mp4
 
-COPY simulate_video_stream.sh /tmp/
-COPY video.mp4 /tmp/
+# Impostare la directory di lavoro
+WORKDIR /app
 
-ENTRYPOINT ["/tmp/simulate_video_stream.sh"]
+# Comando per eseguire il video con VLC
+ENTRYPOINT ["vlc" , "video.mp4"]
