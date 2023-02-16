@@ -3,9 +3,10 @@ kind: Service
 metadata:
   name: video-service
 spec:
-  type: LoadBalancer
+  type: NodePort
   selector:
     app: video
   ports:
-  - port: 8080
+  - name: video-port
+    port: 8080
     targetPort: 8080

@@ -1,0 +1,26 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: wordpress-pod
+  labels:
+    app: wordpress
+spec:
+  containers:
+    - name: wordpress-container
+      image: docker.io/wordpress:latest
+      ports:
+        - containerPort: 80
+      env:
+        - name: WORDPRESS_DB_HOST
+          value: "mysql-service"
+        - name: WORDPRESS_DB_USER
+          value: "wordpress"
+        - name: WORDPRESS_DB_PASSWORD
+          value: "password"
+        - name: WORDPRESS_DB_NAME
+          value: "wordpress"
+  restartPolicy: Always
+  nodeSelector:
+    kubernetes.io/hostname: leonardo-dev
+
+

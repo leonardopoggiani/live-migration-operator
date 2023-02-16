@@ -5,8 +5,8 @@
 # spec:
 #   # Add fields here
 #   foo: bar
-apiVersion: podmig.dcn.ssu.ac.kr/v1
-kind: Podmigration
+apiVersion: livemigration.liqo.io/v1alpha1
+kind: LiveMigration
 metadata:
   name: test
   labels:

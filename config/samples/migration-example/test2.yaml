@@ -5,21 +5,22 @@
 # spec:
 #   # Add fields here
 #   foo: bar
-apiVersion: podmig.dcn.ssu.ac.kr/v1
-kind: Podmigration
+apiVersion: livemigration.liqo.io/v1alpha1
+kind: LiveMigration
 metadata:
   name: test2
   labels:
-    # name: test2
-    app: video
+    app: wordpress
 spec:
   replicas: 1
   action: live-migration
   # snapshotPath: /var/lib/kubelet/migration
-  sourcePod: video
-  destHost: worker2
+  sourcePod: wordpress-pod
+  destHost: leonardo-xps-15-9500
   selector:
-    podmig: dcn
+    matchLabels:
+      app: wordpress-pod
+      namespace: default
   # template:
   #   metadata:
   #     labels:

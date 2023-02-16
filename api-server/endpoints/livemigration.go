@@ -57,7 +57,7 @@ func (pe *LivemigrationEndpoint) create(request *restful.Request, response *rest
 	pm := new(Livemigration)
 	err := request.ReadEntity(pm)
 	pm.Action = strings.ToLower(pm.Action)
-	labelSelector := metav1.LabelSelector{MatchLabels: map[string]string{"podmig": "dcn"}}
+	labelSelector := metav1.LabelSelector{MatchLabels: map[string]string{"livemig": "unipi"}}
 	pm.Selector = &labelSelector
 	pm.Template = corev1.PodTemplateSpec{
 		Spec: corev1.PodSpec{

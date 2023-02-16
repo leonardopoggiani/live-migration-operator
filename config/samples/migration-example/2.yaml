@@ -21,4 +21,4 @@ spec:
         - name: video
           mountPath: /data  # in the container filesystem
   nodeSelector:
-    kubernetes.io/hostname: rome-worker
+    kubernetes.io/hostname: leonardo-dev
