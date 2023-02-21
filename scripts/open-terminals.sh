@@ -1,14 +1,7 @@
 #!/bin/bash
 
-# Verifies that the file name was provided as an argument
-if [ $# -eq 0 ]; then
-  echo "Usage: $0 <file_name>"
-  exit 1
-fi
+xfce4-terminal -T "ubuntu@172.16.3.227" -x bash -c "ssh -t ubuntu@172.16.3.227; bash" &
+xfce4-terminal -T "ubuntu@172.16.6.52" -x bash -c "ssh -t ubuntu@172.16.6.52; bash" &
+xfce4-terminal -T "ubuntu@172.16.3.79" -x bash -c "ssh -t ubuntu@172.16.3.79; bash" &
+xfce4-terminal -T "ubuntu@172.16.6.63" -x bash -c "ssh -t ubuntu@172.16.6.63; bash" &
 
-# Reads the file line by line and opens an SSH connection to each in a different terminal window
-count=1
-while read address; do
-  xfce4-terminal -- /bin/bash -c "ssh -tt -o 'StrictHostKeyChecking=no' ubuntu@$address 'echo ubuntu | sudo -S su; bash'" &
-  count=$((count+1))
-done < $1
