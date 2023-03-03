@@ -3,6 +3,7 @@ module github.com/leonardopoggiani/live-migration-operator
 go 1.20
 
 require (
+	github.com/checkpoint-restore/go-criu/v6 v6.3.0
 	github.com/emicklei/go-restful/v3 v3.10.1
 	github.com/onsi/ginkgo/v2 v2.8.0
 	github.com/onsi/gomega v1.26.0
