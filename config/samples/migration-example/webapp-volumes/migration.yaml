@@ -15,9 +15,9 @@ metadata:
 spec:
   replicas: 1
   action: live-migration
-  # snapshotPath: /var/lib/kubelet/migration
-  sourcePod: my-webapp-5856f58698-5csn8
-  destHost: liqo-milan-cluster
+  snapshotPath: /var/lib/kubelet/migration
+  sourcePod: my-webapp-5856f58698-bcbmr
+  destHost: rome-worker
   selector:
     matchLabels:
       app: my-webapp

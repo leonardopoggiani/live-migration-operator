@@ -17,7 +17,7 @@ spec:
   action: live-migration
   # snapshotPath: /var/lib/kubelet/migration
   sourcePod: multi-container-pod
-  destHost: liqo-milan-cluster
+  destHost: rome-worker2
   selector:
     matchLabels:
       app: multi-container-pod

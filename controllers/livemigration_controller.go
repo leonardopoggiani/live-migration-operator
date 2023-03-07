@@ -18,14 +18,16 @@ package controllers
 
 import (
 	"context"
-	"github.com/checkpoint-restore/go-criu/v6"
-	criurpc "github.com/checkpoint-restore/go-criu/v6/rpc"
-	v1 "github.com/leonardopoggiani/live-migration-operator/api/v1alpha1"
+	criu "github.com/checkpoint-restore/go-criu"
+	"github.com/containerd/containerd"
+	"github.com/containerd/containerd/api/services/tasks/v1"
+	"github.com/containerd/containerd/cio"
+	"github.com/containerd/containerd/namespaces"
+	api "github.com/leonardopoggiani/live-migration-operator/api/v1alpha1"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/klog/v2"
-	"log"
 	"math/rand"
 	"os"
 	"os/exec"
@@ -51,40 +53,111 @@ func (r *LiveMigrationReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 	ctx = context.Background()
 	klog.Infof("Reconciling LiveMigration %s", req.Name)
 
-	/* TODO: initialize CRIU env*/
-	c := criu.MakeCriu()
-	version, err := c.GetCriuVersion()
-	if err != nil {
-		klog.ErrorS(err, "Error in CRIU env")
-	}
-	klog.Infof("CRIU version installed %d", version)
+	/* TODO: initialize containerd/crio env*/
+	/* first may need to test the migration with default options using a node that is not the virtual-kubelet node
+	(there may be the taint (noSchedule) that complicate things). Then try to understand how migration works originally
+	(they used a migration with containerd or something else? it seems that it's not in the GO code)
+	Then I can try different migrations supports like CRIO or Containerd one.
+	*/
 
-	logFile := "/var/log/criu.log"
+	// ******* CONTAINERD ******* //
+	/*
+		c, err := containerd.New("/run/containerd/containerd.sock")
+		if err != nil {
+			klog.Errorf("ERR: %s", err)
+		}
+		klog.Infof("opened containerd client", "client", c)
 
-	imagesDirPath := "/var/lib/criu/images"
-	imagesDir, err := os.Open(imagesDirPath)
-	if err != nil {
-		// handle error
-	}
-	defer imagesDir.Close()
-	imagesDirFd := int32(imagesDir.Fd())
+		defer c.Close()
 
-	leaveRunning := true
-	trackMem := true
-	tcpEstablished := true
-	extUnixSk := true
+		// create a context for docker
+		ctx = context.Background()
+		ctx = namespaces.WithNamespace(ctx, "my-namespace")
 
-	opts := &criurpc.CriuOpts{
-		ImagesDirFd:    &imagesDirFd,
-		LogFile:        &logFile,
-		LeaveRunning:   &leaveRunning,
-		TrackMem:       &trackMem,
-		TcpEstablished: &tcpEstablished,
-		ExtUnixSk:      &extUnixSk,
-	}
+		klog.Infof("created namespace", "namespace", ctx)
+
+		// pull an image and unpack it into the configured snapshotter
+		image, err := c.Pull(ctx, "docker.io/library/redis:latest", containerd.WithPullUnpack)
+		if err != nil {
+			klog.Errorf("ERR: %s", err)
+		}
+		klog.Infof("pulled image", "image", image)
+
+		// allocate a new RW root filesystem for a container based on the image
+		redis, err := c.NewContainer(ctx, "redis-master",
+			containerd.WithNewSnapshot("redis-rootfs", image),
+			containerd.WithNewSpec(oci.WithImageConfig(image)),
+		)
+		if err != nil {
+			klog.Errorf("ERR %s", err)
+		}
+
+		// create a new task
+		task, err := redis.NewTask(ctx, cio.NewCreator(cio.WithStdio))
+		defer task.Delete(ctx)
+		if err != nil {
+			klog.Errorf("ERR %s", err)
+		}
+
+		// the task is now running and has a pid that can be used to setup networking
+		// or other runtime settings outside containerd
+		pid := task.Pid()
+		klog.Infof("redis-master running as pid %d", pid)
+
+		// start the redis-server process inside the container
+		err = task.Start(ctx)
+		klog.ErrorS(err, "start task")
+
+		// wait for the task to exit and get the exit status
+		status, err := task.Wait(ctx)
+		klog.Infof("status task %s", status)
+
+		// checkpoint the task then push it to a registry
+		checkpoint, err := task.Checkpoint(ctx)
+		klog.ErrorS(err, "checkpoint error")
+
+		// push the image to the registry using the descriptor
+		err = c.Push(ctx, "myregistry/checkpoints/redis:master", checkpoint.Target())
+		if err != nil {
+			// handle error
+		}
+
+		// on a new machine pull the checkpoint and restore the redis container
+		checkpoint, err = c.Pull(ctx, "myregistry/checkpoints/redis:master")
+
+		redis, err = c.NewContainer(ctx, "redis-master", containerd.WithNewSnapshot("redis-rootfs", checkpoint))
+		defer redis.Delete(ctx)
+
+		task, err = redis.NewTask(ctx, cio.NewCreator(cio.WithStdio), containerd.WithTaskCheckpoint(checkpoint))
+		defer task.Delete(ctx)
+
+		err = task.Start(ctx)
+
+
+	*/
+	/*
+		// node1
+		checkpoint, err := container.Checkpoint(ctx, ref, containerd.WithTaskState)
+
+		client.Push(ctx, ref, checkpoint.Target())
+
+		// node2
+		checkpoint, err := client.Pull(ctx, ref)
+
+		container, err := client.NewContainer(ctx, id)
+		container.Restore(ctx, checkpoint)
+
+		task, err := container.NewTask(ctx, nil, containerd.WithCheckpoint(checkpoint))
+	*/
+	// ******* CRIO ******* //
+	/*
+		c, err := crio.New("/run/crio/crio.sock")
+	*/
+
+	// ******* original ******* //
 
 	// Load the LiveMigration resource object, if there is no Object, return directly
-	var migratingPod v1.LiveMigration
+	var migratingPod api.LiveMigration
 	klog.Infof("", "namespaced name", req.NamespacedName)
 	if err := r.Get(ctx, req.NamespacedName, &migratingPod); err != nil {
 		return ctrl.Result{}, client.IgnoreNotFound(err)
@@ -110,6 +183,7 @@ func (r *LiveMigrationReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 	desiredLabels := getPodsLabelSet(template)
 	klog.Infof("", "desired labels: ", desiredLabels)
 	klog.Infof("", "migratingPod.Name: ", migratingPod.Name)
+	klog.Infof("", "migratingPod.Spec.DestHost: ", migratingPod.Spec.DestHost)
 
 	desiredLabels["migratingPod"] = migratingPod.Name
 
@@ -153,7 +227,7 @@ func (r *LiveMigrationReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 			klog.ErrorS(err, "sourcePod not exist", "pod", annotations["sourcePod"])
 			return ctrl.Result{}, err
 		}
-		if err := r.removeCheckpointPod(ctx, sourcePod, "/var/lib/kubelet/migration/kkk", "", req.Namespace); err != nil {
+		if err := r.removeCheckpointPod(ctx, sourcePod, "/var/lib/kubelet/migration/", "", req.Namespace); err != nil {
 			klog.ErrorS(err, "unable to remove checkpoint", "pod", sourcePod)
 			return ctrl.Result{}, err
 		}
@@ -170,29 +244,24 @@ func (r *LiveMigrationReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 			containers = append(containers, container.Name)
 		}
 
-		for _, container := range containers {
-			err = c.Prepare()
-			if err != nil {
-				log.Fatalf("Failed to prepare criu %s: %v", container, err)
-			}
+		// for every container inside a pod
+		/*
+			It may be an option to make a checkpoint of every container separetely or another option may be to compress all
+			the images inside one. May need to investigate the performance of the two proposal.
+			And if i do the checkpoints concurrently?
+		*/
 
-			err = c.PreDump(opts, nil)
-			if err != nil {
-				log.Fatalf("Failed to pre-dump %s: %v", container, err)
-			}
-
-			err = c.Dump(opts, nil)
-			if err != nil {
-				log.Fatalf("Failed to dump container %s: %v", container, err)
-			}
+		err = r.checkpointPodCriu(ctx, sourcePod, "/var/lib/kubelet/migration/")
+		if err != nil {
+			return ctrl.Result{}, err
+		} else {
+			klog.Infof("", "checkpointPodCriu ok")
 		}
 
-		/*
-			if err := r.checkpointPod(ctx, sourcePod, ""); err != nil {
-				klog.ErrorS(err, "unable to checkpoint", "pod", sourcePod)
-				return ctrl.Result{}, err
-			}
-		*/
+		if err := r.checkpointPod(ctx, sourcePod, ""); err != nil {
+			klog.ErrorS(err, "unable to checkpoint", "pod", sourcePod)
+			return ctrl.Result{}, err
+		}
 
 		klog.Infof("", "Live-migration", "Step 2 - checkpoint source Pod - completed")
 		// TODO(TUONG): make migrate all container inside Pod
@@ -201,19 +270,25 @@ func (r *LiveMigrationReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 		// 	klog.Infof("", "container of pod", copySourcePod.Spec.Containers[container].Name)
 		// }
 
+		// at this moment just loop the containers inside a pod, later it must checkpoint and restore every container
+		// inside the pod.
 		for container := range sourcePod.Spec.Containers {
 			klog.Infof("", "container --> ", sourcePod.Spec.Containers[container].Name)
 		}
 
 		// Step3: wait until checkpoint info are created
 		container := sourcePod.Spec.Containers[0].Name // = web
-		// containers: [ web | db ]
-		checkpointPath := path.Join("/var/lib/kubelet/migration/kkk", sourcePod.Name) // = multi-container-pod
-		klog.Infof("", "checkpointPath: ", checkpointPath)                            // = /var/lib/kubelet/migration/kkk/multi-container-pod
-		klog.Infof("", "live-migration pod", container)                               // = web
-		for {
-			klog.Infof("looping")
+		// multi-containers: [ web | db ]
 
+		// change the path to check, may no be anymore this one may also need to understand how checkpoint is done now
+		checkpointPath := path.Join("/var/lib/kubelet/migration/", sourcePod.Name) // = multi-container-pod
+		klog.Infof("", "checkpointPath: ", checkpointPath)                         // = /var/lib/kubelet/migration/multi-container-pod
+		klog.Infof("", "live-migration pod", container)                            // = web
+
+		for {
+			klog.Infof("looping waiting on file %s", path.Join(checkpointPath, container, "descriptors.json"))
+
+			// why this file and this path?
 			_, err := os.Stat(path.Join(checkpointPath, container, "descriptors.json"))
 			if os.IsNotExist(err) {
 				time.Sleep(100 * time.Millisecond)
@@ -221,9 +296,10 @@ func (r *LiveMigrationReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 				break
 			}
 		}
+
 		klog.Infof("", "Live-migration", "checkpointPath"+checkpointPath)
 		klog.Infof("", "Live-migration", "Step 3 - Wait until checkpoint info are created - completed")
-		// time.Sleep(10)
+		time.Sleep(10)
 		// Step4: restore destPod from sourcePod checkpoted info
 		newPod, err := r.restorePod(ctx, pod, annotations["sourcePod"], checkpointPath)
 		if err != nil {
@@ -243,7 +319,7 @@ func (r *LiveMigrationReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 		}
 		klog.Infof("", "Live-migration", "Step 4.1 - Check whether if newPod is Running or not - completed")
 		// Step5: Clean checkpointpod process and checkpointPath
-		// if err := r.removeCheckpointPod(ctx, sourcePod, "/var/lib/kubelet/migration/kkk", newPod.Name, req.Namespace); err != nil {
+		// if err := r.removeCheckpointPod(ctx, sourcePod, "/var/lib/kubelet/migration/", newPod.Name, req.Namespace); err != nil {
 		// 	klog.ErrorS(err, "unable to remove checkpoint", "pod", sourcePod)
 		// 	return ctrl.Result{}, err
 		// }
@@ -311,7 +387,7 @@ func (r *LiveMigrationReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 // SetupWithManager sets up the controller with the Manager.
 func (r *LiveMigrationReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&v1.LiveMigration{}).
+		For(&api.LiveMigration{}).
 		Complete(r)
 }
 
@@ -353,9 +429,17 @@ func (r *LiveMigrationReconciler) deletePod(ctx context.Context, pod *corev1.Pod
 
 func (r *LiveMigrationReconciler) checkpointPod(ctx context.Context, pod *corev1.Pod, snapshotPath string) error {
 	snapshotPolicy := "checkpoint"
+
 	if snapshotPath == "" {
-		snapshotPath = "/var/lib/kubelet/migration/kkk"
+		snapshotPath = "/var/lib/kubelet/migration/multi-container-pod"
 	}
+	// not sure but to investigate:
+	/*
+		updating the annotations for the given pod triggers a Reconciler somewhere that check the pod, see the new annotation
+		and perform the checkpoint?
+	*/
+	klog.Infof("", "checkpointPod", "pod", pod.Name, "snapshotPath", snapshotPath)
+
 	if err := r.updateAnnotations(ctx, pod, snapshotPolicy, snapshotPath); err != nil {
 		return err
 	}
@@ -367,6 +451,8 @@ func (r *LiveMigrationReconciler) restorePod(ctx context.Context, pod *corev1.Po
 	// targetPod.Finalizers = append(targetPod.Finalizers, migratingPodFinalizer)
 	s1 := rand.NewSource(time.Now().UnixNano())
 	number := rand.New(s1)
+	// why bring the name like this? just loosing generality in my opinion, what if my pod name is "my-webapp"? It
+	// will break all the system
 	sourcePod = strings.Split(sourcePod, "-migration-")[0]
 	pod.Name = sourcePod + "-migration-" + strconv.Itoa(number.Intn(100))
 	// pod.Spec.ClonePod = sourcePod
@@ -433,6 +519,9 @@ func (r *LiveMigrationReconciler) removeCheckpointPod(ctx context.Context, pod *
 	if err := r.updateAnnotations(ctx, pod, snapshotPolicyUpdate, snapshotPathUpdate); err != nil {
 		return err
 	}
+	// this is where i need the permissions executing the controller are we really sure it's better like this
+	// and not just keeping all the checkpoint versions (how much space are we talking about?) and maybe incremetally
+	// increase the version number?
 	os.Chmod(snapshotPathCurrent, 0777)
 	if _, err := exec.Command("sudo", "rm", "-rf", snapshotPathCurrent).Output(); err != nil {
 		return err
@@ -451,5 +540,241 @@ func (r *LiveMigrationReconciler) updateAnnotations(ctx context.Context, pod *co
 	if err := r.Update(ctx, pod); err != nil {
 		return err
 	}
+	return nil
+}
+
+func (r *LiveMigrationReconciler) checkpointPodCriu(ctx context.Context, pod *corev1.Pod, snapshotPath string) error {
+
+	cr := criu.MakeCriu()
+	err := cr.Prepare()
+	if err != nil {
+		return err
+	} else {
+		klog.Infof("checkpointPodCriu", "pod", pod.Name, "snapshotPath", snapshotPath)
+	}
+
+	// ******* CONTAINERD ******* //
+
+	cntrd, err := containerd.New("/run/containerd/containerd.sock")
+	if err != nil {
+		klog.Errorf("ERR: %s", err)
+	}
+	klog.Infof("opened containerd client", "client", cntrd)
+
+	defer func(cntrd *containerd.Client) {
+		err := cntrd.Close()
+		if err != nil {
+
+		}
+	}(cntrd)
+
+	// create a context for docker
+	ctx = context.Background()
+	ctx = namespaces.WithNamespace(ctx, "liqo-demo")
+
+	klog.Infof("created namespace", "namespace", ctx)
+
+	// list all running containers in the liqo-demo namespace, need to checkpoint all of them
+	containers, err := cntrd.ContainerService().List(ctx)
+	if err != nil {
+		klog.Errorf("ERR: %s", err)
+	} else {
+		klog.Infof("containers", "containers", containers)
+	}
+
+	for cntr := range containers {
+		klog.Infof("container", "container", cntr)
+
+		container, err := cntrd.LoadContainer(ctx, string(rune(cntr)))
+		if err != nil {
+			return err
+		} else {
+			klog.Infof("loaded container", "container", container)
+		}
+	}
+
+	container, err := cntrd.LoadContainer(ctx, "redis")
+	if err != nil {
+		return err
+	} else {
+		klog.Infof("loaded container", "container", container)
+	}
+
+	/* pulling an image from a registry, REMOTE method
+	// pull an image and unpack it into the configured snapshotter
+	image, err := cntrd.Pull(ctx, "docker.io/library/redis:latest", containerd.WithPullUnpack)
+	if err != nil {
+		klog.Errorf("ERR: %s", err)
+	}
+	klog.Infof("pulled image", "image", image)
+	*/
+
+	snapshotter := containerd.DefaultSnapshotter
+	snapshotterService := cntrd.SnapshotService(snapshotter)
+	if err != nil {
+		return err
+	}
+	if err := snapshotterService.Remove(ctx, "redis-rootfs"); err != nil {
+		klog.ErrorS(err, "failed to remove snapshot", "snapshot", "redis-rootfs")
+	} else {
+		klog.Infof("removed snapshot", "snapshot", "redis-rootfs")
+	}
+
+	// Get a list of all tasks running in the system
+	taskService := cntrd.TaskService()
+	tasksList, err := cntrd.TaskService().List(ctx, &tasks.ListTasksRequest{})
+
+	// Iterate through the tasks and stop and delete any tasks with the name "redis"
+	for _, t := range tasksList.Tasks {
+		taskPid := t.Pid
+		taskID := t.ID
+		taskContainerID := t.ContainerID
+		klog.Infof("task", "pid", taskPid, "id", taskID, "containerID", taskContainerID)
+
+		request := tasks.DeleteTaskRequest{
+			ContainerID: taskContainerID,
+		}
+
+		response, err := taskService.Delete(ctx, &request)
+		if err != nil {
+			klog.ErrorS(err, "failed to delete task", "task", "redis")
+		} else {
+			klog.Infof("deleted task", "task", response)
+		}
+	}
+
+	err = cntrd.ContainerService().Delete(ctx, "redis")
+	if err != nil {
+		klog.ErrorS(err, "failed to delete container", "container", "redis")
+	} else {
+		klog.Infof("deleted container", "container", "redis")
+	}
+
+	// allocate a new RW root filesystem for a container based on the image
+	/* if using a running container there is no need to create a new one
+	redis, err := cntrd.NewContainer(ctx, "redis",
+		containerd.WithNewSnapshot("redis-rootfs", image),
+		containerd.WithNewSpec(oci.WithImageConfig(image)),
+	)
+	if err != nil {
+		klog.Errorf("ERR %s", err)
+	}
+
+	*/
+
+	task, err := container.NewTask(ctx, cio.NewCreator(cio.WithStdio))
+	if err != nil {
+		klog.Errorf("ERR %s", err)
+	} else {
+		klog.Infof("created task", "task", task)
+	}
+
+	// the task is now running and has a pid that can be used to setup networking
+	// or other runtime settings outside containerd
+	pid := task.Pid()
+	klog.Infof("redis is running as pid %d", pid)
+
+	// start the redis-server process inside the container
+	err = task.Start(ctx)
+	if err != nil {
+		klog.ErrorS(err, "start task")
+	}
+
+	// wait for the task to exit and get the exit status
+	status, err := task.Wait(ctx)
+	if err != nil {
+		klog.ErrorS(err, "ERR")
+	} else {
+		klog.Infof("task status", "status", status)
+	}
+
+	// checkpoint the task then push it to a registry
+	checkpoint, err := task.Checkpoint(ctx)
+	if err != nil {
+		klog.ErrorS(err, "checkpoint error")
+	} else {
+		klog.Infof("checkpointed task", "checkpoint", checkpoint)
+	}
+
+	// push the image to the registry using the descriptor
+	/*
+		err = cntrd.Push(ctx, "docker.io/leonardopoggiani/redis", checkpoint.Target())
+		if err != nil {
+			klog.Errorf("ERR %s", err)
+		} else {
+			klog.Infof("pushed image", "image", image)
+		}
+	*/
+
+	// on a new machine pull the checkpoint and restore the redis container
+	/*
+		checkpoint, err = cntrd.Pull(ctx, "myregistry/checkpoints/redis:master")
+
+		nginx, err = cntrd.NewContainer(ctx, "redis-master", containerd.WithNewSnapshot("redis-rootfs", checkpoint))
+		defer func(nginx containerd.Container, ctx context.Context, opts ...containerd.DeleteOpts) {
+			err := nginx.Delete(ctx, opts...)
+			if err != nil {
+
+			}
+		}(nginx, ctx)
+
+		task, err = nginx.NewTask(ctx, cio.NewCreator(cio.WithStdio), containerd.WithTaskCheckpoint(checkpoint))
+		defer func(task containerd.Task, ctx context.Context, opts ...containerd.ProcessDeleteOpts) {
+			_, err := task.Delete(ctx, opts...)
+			if err != nil {
+
+			}
+		}(task, ctx)
+
+		err = task.Start(ctx)
+
+	*/
+
+	/*
+
+		checkpointOpts := criu.CheckpointOpts{
+			TrackMem:     true,
+			LeaveRunning: true,
+		}
+		snapshotPolicy := "checkpoint"
+		if snapshotPath == "" {
+			snapshotPath = "/var/lib/kubelet/migration/kkk"
+		}
+		if err := r.updateAnnotations(ctx, pod, snapshotPolicy, snapshotPath); err != nil {
+			return err
+		}
+		// Get the containerd client
+		client, err := containerd.New("/run/containerd/containerd.sock")
+		if err != nil {
+			return err
+		}
+		defer client.Close()
+
+		// Get the container and task for the pod
+		container, err := client.LoadContainer(ctx, pod.Name)
+		if err != nil {
+			return err
+		}
+		defer container.Delete(ctx)
+
+		task, err := container.Task(ctx, nil)
+		if err != nil {
+			return err
+		}
+		defer task.Delete(ctx)
+
+		// Checkpoint the task with custom options
+		checkpoint, err := task.CheckpointWithOptions(ctx, checkpointOpts)
+		if err != nil {
+			return err
+		}
+
+		// Push the checkpoint to a registry
+		err = client.Push(ctx, "myregistry/checkpoints/"+pod.Name+":latest", checkpoint)
+		if err != nil {
+			return err
+		}
+
+	*/
 	return nil
 }
