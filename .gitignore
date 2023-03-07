@@ -19,7 +19,7 @@
 
 # Go workspace file
 go.work
-
+api-server/out/*
 .golangci.yml
 */**/*.md
 build
