@@ -56,6 +56,18 @@ func (r *LiveMigrationReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 	ctx = context.Background()
 	klog.Infof("Reconciling LiveMigration %s", req.Name)
 
+	// Load Kubernetes config
+	config, err := clientcmd.BuildConfigFromFlags("", "/home/ubuntu/.kube/config")
+	if err != nil {
+		klog.ErrorS(err, "failed to load Kubernetes config")
+	}
+
+	// Create Kubernetes API client
+	clientset, err := kubernetes.NewForConfig(config)
+	if err != nil {
+		klog.ErrorS(err, "failed to create Kubernetes client")
+	}
+
 	/* TODO: initialize containerd/crio env*/
 	/* first may need to test the migration with default options using a node that is not the virtual-kubelet node
 	(there may be the taint (noSchedule) that complicate things). Then try to understand how migration works originally
@@ -253,7 +265,7 @@ func (r *LiveMigrationReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 		// Get the Kubernetes client configuration.
 
 		// Iterate over each pod and checkpoint each container.
-		containers, err := PrintContainerIDs()
+		containers, err := PrintContainerIDs(clientset)
 		if err != nil {
 			klog.ErrorS(err, "unable to print containerIDs")
 		}
@@ -325,8 +337,8 @@ func (r *LiveMigrationReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 	*/
 
 	// klog.Infof("", "Live-migration", "checkpointPath"+checkpointPath)
-	klog.Infof("", "Live-migration", "Step 3 - Wait until checkpoint info are created - completed")
-	time.Sleep(10)
+	// klog.Infof("", "Live-migration", "Step 3 - Wait until checkpoint info are created - completed")
+	// time.Sleep(10)
 	// Step4: restore destPod from sourcePod checkpoted info
 	// newPod, err := r.restorePod(ctx, pod, annotations["sourcePod"], checkpointPath)
 	/*
@@ -336,6 +348,16 @@ func (r *LiveMigrationReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 		}
 
 	*/
+
+	// func (r *LiveMigrationReconciler) restorePodCrio(podName string, namespace string, containerName string, checkpointImage string, clientset *kubernetes.Clientset)
+
+	klog.Infof("Migrating pod: %s", migratingPod)
+
+	err = r.restorePodCrio(migratingPod.Name, req.Namespace, "web", "checkpoint", clientset)
+	if err != nil {
+		klog.ErrorS(err, "unable to restore", "pod", migratingPod.Name)
+	}
+
 	klog.Infof("", "Live-migration", "Step 4 - Restore destPod from sourcePod's checkpointed info - completed")
 	// time.Sleep(5)
 	/*
@@ -832,29 +854,12 @@ func (r *LiveMigrationReconciler) checkpointPodCrio(containerID string) error {
 	return nil
 }
 
-func (r *LiveMigrationReconciler) restorePodCrio() error {
-
-	return nil
-}
-
 type Container struct {
 	ID   string
 	Name string
 }
 
-func PrintContainerIDs() ([]Container, error) {
-	// Load Kubernetes config
-	config, err := clientcmd.BuildConfigFromFlags("", "/home/ubuntu/.kube/config")
-	if err != nil {
-		return nil, fmt.Errorf("failed to load Kubernetes config: %v", err)
-	}
-
-	// Create Kubernetes API client
-	clientset, err := kubernetes.NewForConfig(config)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create Kubernetes client: %v", err)
-	}
-
+func PrintContainerIDs(clientset *kubernetes.Clientset) ([]Container, error) {
 	// Get pods in liqo-demo namespace
 	pods, err := clientset.CoreV1().Pods("liqo-demo").List(context.Background(), metav1.ListOptions{})
 	if err != nil {
@@ -882,4 +887,91 @@ func PrintContainerIDs() ([]Container, error) {
 	}
 
 	return containers, nil
+}
+
+func (r *LiveMigrationReconciler) restorePodCrio(podName string, namespace string, containerName string, checkpointImage string, clientset *kubernetes.Clientset) error {
+
+	podClient := clientset.CoreV1().Pods(namespace)
+	pod, err := podClient.Get(context.Background(), podName, metav1.GetOptions{})
+	if err != nil {
+		klog.ErrorS(err, "failed to get pod", "podName", podName, "namespace", namespace)
+		return err
+	}
+
+	// Find the container to restore.
+	var container *corev1.ContainerStatus
+	for i := range pod.Status.ContainerStatuses {
+		if pod.Status.ContainerStatuses[i].Name == containerName {
+			container = &pod.Status.ContainerStatuses[i]
+			break
+		}
+	}
+	if container == nil {
+		return fmt.Errorf("container %q not found in pod %q", containerName, podName)
+	}
+
+	// Create a new container with the checkpoint image.
+	containerSpec := &corev1.Container{
+		Name:            containerName,
+		Image:           checkpointImage,
+		ImagePullPolicy: corev1.PullIfNotPresent,
+	}
+	pod.Spec.Containers = append(pod.Spec.Containers, *containerSpec)
+
+	// Update the pod.
+	_, err = podClient.Update(context.Background(), pod, metav1.UpdateOptions{})
+	if err != nil {
+		klog.ErrorS(err, "failed to update pod", "podName", podName, "namespace", namespace)
+		return err
+	}
+
+	// Wait for the new container to become ready.
+	err = r.waitForContainerReady(podName, namespace, containerName, clientset)
+	if err != nil {
+		klog.ErrorS(err, "container did not become ready", "podName", podName, "namespace", namespace, "containerName", containerName)
+		return err
+	}
+
+	// Delete the old container.
+	containerID := container.ContainerID
+	deleteCmd := exec.Command("crictl", "rm", containerID)
+	output, err := deleteCmd.CombinedOutput()
+	if err != nil {
+		klog.ErrorS(err, "failed to delete container", "containerID", containerID, "output", string(output))
+		return err
+	} else {
+		klog.InfoS("deleted container", "containerID", containerID, "output", string(output))
+	}
+
+	return nil
+}
+
+func (r *LiveMigrationReconciler) waitForContainerReady(podName string, namespace string, containerName string, clientset *kubernetes.Clientset) error {
+	timeout := 60 * time.Second
+	interval := 1 * time.Second
+	timer := time.NewTimer(timeout)
+	defer timer.Stop()
+
+	for {
+		select {
+		case <-timer.C:
+			return fmt.Errorf("timed out waiting for container to become ready")
+		default:
+			pod, err := clientset.CoreV1().Pods(namespace).Get(context.Background(), podName, metav1.GetOptions{})
+			if err != nil {
+				return err
+			}
+
+			for i := range pod.Status.ContainerStatuses {
+				if pod.Status.ContainerStatuses[i].Name == containerName {
+					if pod.Status.ContainerStatuses[i].Ready {
+						return nil
+					}
+					break
+				}
+			}
+		}
+
+		time.Sleep(interval)
+	}
 }
