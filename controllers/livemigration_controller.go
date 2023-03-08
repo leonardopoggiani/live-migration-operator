@@ -919,7 +919,7 @@ func (r *LiveMigrationReconciler) restorePodCrio(podName string, namespace strin
 
 	klog.Infof("restored pod %s", restoredPod)
 	// Update the pod
-	_, err = podClient.Update(context.Background(), restoredPod, metav1.UpdateOptions{})
+	_, err = podClient.Create(context.Background(), restoredPod, metav1.CreateOptions{})
 	if err != nil {
 		klog.ErrorS(err, "failed to update pod", "podName", podName, "namespace", namespace)
 		return err
