@@ -30,6 +30,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/watch"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/clientcmd"
 	"k8s.io/klog/v2"
@@ -358,7 +359,7 @@ func (r *LiveMigrationReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 	klog.Infof("Migrating pod: %s", migratingPod)
 
 	// first I need to terminate the checkpointed pod
-	err = r.terminateCheckpointedPod(migratingPod.Name, clientset)
+	err = r.terminateCheckpointedPod(ctx, migratingPod.Name, clientset)
 	if err != nil {
 		klog.ErrorS(err, "unable to terminate checkpointed pod", "pod", migratingPod.Name)
 	} else {
@@ -1009,15 +1010,15 @@ func (r *LiveMigrationReconciler) waitForContainerReady(podName string, namespac
 	}
 }
 
-func (r *LiveMigrationReconciler) terminateCheckpointedPod(podName string, clientset *kubernetes.Clientset) error {
+func (r *LiveMigrationReconciler) terminateCheckpointedPod(ctx context.Context, podName string, clientset *kubernetes.Clientset) error {
 	// get the pod by name
-	klog.Infof("", "Terminating pod", "pod", podName)
+	klog.Infof("", "Terminating pod", podName)
 
 	pod, err := clientset.CoreV1().Pods("liqo-demo").Get(context.Background(), podName, metav1.GetOptions{})
 	if err != nil {
-		klog.ErrorS(err, "unable to get pod", "pod", pod.Name)
+		klog.ErrorS(err, "unable to get pod", pod.Name)
 	} else {
-		klog.Info("pod", "pod", podName)
+		klog.Info("pod", podName)
 	}
 
 	// delete the pod
@@ -1025,9 +1026,51 @@ func (r *LiveMigrationReconciler) terminateCheckpointedPod(podName string, clien
 	if err != nil {
 		klog.ErrorS(err, "unable to delete pod", "pod", pod.Name)
 	} else {
-		klog.Info("pod deleted", "pod", podName)
+		klog.Info("pod deleted", podName)
 	}
 
-	klog.Infof("", "Pod terminated", "pod", podName)
+	err = waitForPodDeletion(ctx, podName, clientset)
+	if err != nil {
+		klog.ErrorS(err, "unable to finish delete pod", "pod", pod.Name)
+	} else {
+		klog.Info("pod deletetion completed", podName)
+	}
+
+	klog.Infof("", "Pod terminated", podName)
 	return nil
+}
+
+func waitForPodDeletion(ctx context.Context, podName string, clientset *kubernetes.Clientset) error {
+
+	fieldSelector := fmt.Sprintf("metadata.name=%s", podName)
+
+	opts := metav1.ListOptions{
+		TypeMeta:      metav1.TypeMeta{},
+		LabelSelector: "",
+		FieldSelector: fieldSelector,
+	}
+
+	w, err := clientset.CoreV1().Pods("liqo-demo").Watch(ctx, opts)
+	if err != nil {
+		klog.ErrorS(err, "unable to watch pod", "pod", podName)
+	} else {
+		klog.Info("watcher", w)
+	}
+	defer w.Stop()
+
+	// wait for the pod to be deleted
+	for {
+		event, ok := <-w.ResultChan()
+		if !ok {
+			// watcher closed, assume pod is deleted
+			break
+		}
+
+		if event.Type == watch.Deleted {
+			klog.Infof("pod %s deleted", podName)
+			return nil
+		}
+	}
+
+	return fmt.Errorf("pod %s not found or already deleted", podName)
 }
