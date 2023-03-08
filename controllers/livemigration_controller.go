@@ -1033,7 +1033,7 @@ func (r *LiveMigrationReconciler) terminateCheckpointedPod(ctx context.Context, 
 	// delete the pod
 	err = clientset.CoreV1().Pods("liqo-demo").Delete(context.Background(), podName, metav1.DeleteOptions{})
 	if err != nil {
-		klog.ErrorS(err, "unable to delete pod", "pod", pod.Name)
+		klog.ErrorS(err, "unable to delete pod", pod.Name)
 	} else {
 		klog.Info("pod deleted", podName)
 	}
@@ -1092,6 +1092,7 @@ func createCheckpointImage(podName, namespaceName, containerName, timestamp stri
 	}
 	newContainer := string(newContainerOutput)
 
+	klog.Infof("", "checkpoint path -> ", "/var/lib/kubelet/checkpoints/checkpoint-"+podName+"_"+namespaceName+"-"+containerName+"-"+timestamp+".tar")
 	addCheckpointCmd := exec.Command("buildah", "add", newContainer, "/var/lib/kubelet/checkpoints/checkpoint-"+podName+"_"+namespaceName+"-"+containerName+"-"+timestamp+".tar", "/")
 	if err := addCheckpointCmd.Run(); err != nil {
 		return fmt.Errorf("failed to add checkpoint to container: %v", err)
