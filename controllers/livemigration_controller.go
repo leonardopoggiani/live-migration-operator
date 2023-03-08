@@ -355,9 +355,11 @@ func (r *LiveMigrationReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 	klog.Infof("Migrating pod: %s", migratingPod)
 
 	// first I need to terminate the checkpointed pod
-	err = terminateCheckpointedPod(migratingPod.Name, clientset)
+	err = r.terminateCheckpointedPod(migratingPod.Name, clientset)
 	if err != nil {
 		klog.ErrorS(err, "unable to terminate checkpointed pod", "pod", migratingPod.Name)
+	} else {
+		klog.Infof("checkpointed pod terminated")
 	}
 
 	// TODO: for every container i previously checkpointed, i need to restore it.
@@ -448,27 +450,6 @@ func (r *LiveMigrationReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 
 	*/
 	return ctrl.Result{}, nil
-}
-
-func terminateCheckpointedPod(podName string, clientset *kubernetes.Clientset) error {
-	// get the pod by name
-	pod, err := clientset.CoreV1().Pods("liqo-demo").Get(context.Background(), podName, metav1.GetOptions{})
-	if err != nil {
-		klog.ErrorS(err, "unable to get pod", "pod", pod.Name)
-	} else {
-		klog.Info("pod", "pod", podName)
-	}
-
-	// delete the pod
-	err = clientset.CoreV1().Pods("liqo-demo").Delete(context.Background(), podName, metav1.DeleteOptions{})
-	if err != nil {
-		klog.ErrorS(err, "unable to delete pod", "pod", pod.Name)
-	} else {
-		klog.Info("pod deleted", "pod", podName)
-	}
-
-	klog.Infof("", "Pod terminated", "pod", podName)
-	return nil
 }
 
 // SetupWithManager sets up the controller with the Manager.
@@ -1023,4 +1004,27 @@ func (r *LiveMigrationReconciler) waitForContainerReady(podName string, namespac
 
 		time.Sleep(interval)
 	}
+}
+
+func (r *LiveMigrationReconciler) terminateCheckpointedPod(podName string, clientset *kubernetes.Clientset) error {
+	// get the pod by name
+	klog.Infof("", "Terminating pod", "pod", podName)
+
+	pod, err := clientset.CoreV1().Pods("liqo-demo").Get(context.Background(), podName, metav1.GetOptions{})
+	if err != nil {
+		klog.ErrorS(err, "unable to get pod", "pod", pod.Name)
+	} else {
+		klog.Info("pod", "pod", podName)
+	}
+
+	// delete the pod
+	err = clientset.CoreV1().Pods("liqo-demo").Delete(context.Background(), podName, metav1.DeleteOptions{})
+	if err != nil {
+		klog.ErrorS(err, "unable to delete pod", "pod", pod.Name)
+	} else {
+		klog.Info("pod deleted", "pod", podName)
+	}
+
+	klog.Infof("", "Pod terminated", "pod", podName)
+	return nil
 }
