@@ -896,6 +896,8 @@ func (r *LiveMigrationReconciler) restorePodCrio(podName string, namespace strin
 	if err != nil {
 		klog.ErrorS(err, "failed to get pod", "podName", podName, "namespace", namespace)
 		return err
+	} else {
+		klog.InfoS("got pod", "podName", podName, "namespace", namespace)
 	}
 
 	// Find the container to restore.
@@ -903,14 +905,15 @@ func (r *LiveMigrationReconciler) restorePodCrio(podName string, namespace strin
 	for i := range pod.Status.ContainerStatuses {
 		if pod.Status.ContainerStatuses[i].Name == containerName {
 			container = &pod.Status.ContainerStatuses[i]
+			klog.InfoS("found container", "container", container.Name)
 			break
 		}
 	}
 	if container == nil {
-		return fmt.Errorf("container %q not found in pod %q", containerName, podName)
+		klog.ErrorS(err, "container not found", "podName", podName, "namespace", namespace, "containerName", containerName)
 	}
 
-	// Create a new container with the checkpoint image.
+	// Create a new container with the checkpoint image
 	containerSpec := &corev1.Container{
 		Name:            containerName,
 		Image:           checkpointImage,
@@ -918,7 +921,8 @@ func (r *LiveMigrationReconciler) restorePodCrio(podName string, namespace strin
 	}
 	pod.Spec.Containers = append(pod.Spec.Containers, *containerSpec)
 
-	// Update the pod.
+	klog.Infof("updating pod %s", pod.Spec.Containers)
+	// Update the pod
 	_, err = podClient.Update(context.Background(), pod, metav1.UpdateOptions{})
 	if err != nil {
 		klog.ErrorS(err, "failed to update pod", "podName", podName, "namespace", namespace)
