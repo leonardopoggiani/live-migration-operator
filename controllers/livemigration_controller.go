@@ -354,6 +354,12 @@ func (r *LiveMigrationReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 
 	klog.Infof("Migrating pod: %s", migratingPod)
 
+	// first I need to terminate the checkpointed pod
+	err = terminateCheckpointedPod(migratingPod.Name, clientset)
+	if err != nil {
+		klog.ErrorS(err, "unable to terminate checkpointed pod", "pod", migratingPod.Name)
+	}
+
 	// TODO: for every container i previously checkpointed, i need to restore it.
 	err = r.restorePodCrio(migratingPod.Name, req.Namespace, "web", "checkpoint", clientset, migratingPod.Spec.DestHost)
 	if err != nil {
@@ -442,6 +448,27 @@ func (r *LiveMigrationReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 
 	*/
 	return ctrl.Result{}, nil
+}
+
+func terminateCheckpointedPod(podName string, clientset *kubernetes.Clientset) error {
+	// get the pod by name
+	pod, err := clientset.CoreV1().Pods("liqo-demo").Get(context.Background(), podName, metav1.GetOptions{})
+	if err != nil {
+		klog.ErrorS(err, "unable to get pod", "pod", pod.Name)
+	} else {
+		klog.Info("pod", "pod", podName)
+	}
+
+	// delete the pod
+	err = clientset.CoreV1().Pods("liqo-demo").Delete(context.Background(), podName, metav1.DeleteOptions{})
+	if err != nil {
+		klog.ErrorS(err, "unable to delete pod", "pod", pod.Name)
+	} else {
+		klog.Info("pod deleted", "pod", podName)
+	}
+
+	klog.Infof("", "Pod terminated", "pod", podName)
+	return nil
 }
 
 // SetupWithManager sets up the controller with the Manager.
@@ -582,7 +609,10 @@ func (r *LiveMigrationReconciler) removeCheckpointPod(ctx context.Context, pod *
 	// this is where i need the permissions executing the controller are we really sure it's better like this
 	// and not just keeping all the checkpoint versions (how much space are we talking about?) and maybe incremetally
 	// increase the version number?
-	os.Chmod(snapshotPathCurrent, 0777)
+	err := os.Chmod(snapshotPathCurrent, 0777)
+	if err != nil {
+		return err
+	}
 	if _, err := exec.Command("sudo", "rm", "-rf", snapshotPathCurrent).Output(); err != nil {
 		return err
 	}
@@ -911,6 +941,7 @@ func (r *LiveMigrationReconciler) restorePodCrio(podName string, namespace strin
 			break
 		}
 	}
+
 	if container == nil {
 		klog.ErrorS(err, "container not found", "podName", podName, "namespace", namespace, "containerName", containerName)
 	}
