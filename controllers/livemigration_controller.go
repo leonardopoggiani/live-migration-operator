@@ -18,6 +18,7 @@ package controllers
 
 import (
 	"context"
+	"fmt"
 	"github.com/checkpoint-restore/go-criu"
 	"github.com/containerd/containerd"
 	"github.com/containerd/containerd/api/services/tasks/v1"
@@ -29,7 +30,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/kubernetes"
-	"k8s.io/client-go/rest"
+	"k8s.io/client-go/tools/clientcmd"
 	"k8s.io/klog/v2"
 	"math/rand"
 	"os"
@@ -240,12 +241,6 @@ func (r *LiveMigrationReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 		// copySourcePod := sourcePod.DeepCopy()
 
 		/* TODO: checkpoint sourcePod */
-
-		var containers []string
-		for _, container := range pod.Spec.Containers {
-			containers = append(containers, container.Name)
-		}
-
 		// for every container inside a pod
 		/*
 			It may be an option to make a checkpoint of every container separetely or another option may be to compress all
@@ -256,43 +251,28 @@ func (r *LiveMigrationReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 		//******* CRI-O ******* //
 		// Get all running pods in the default namespace.
 		// Get the Kubernetes client configuration.
-		config, err := rest.InClusterConfig()
-		if err != nil {
-			panic(err)
-		}
-
-		// Create the Kubernetes clientset.
-		cl, err := kubernetes.NewForConfig(config)
-		if err != nil {
-			panic(err)
-		}
-
-		pods, err := cl.CoreV1().Pods("liqo-demo").List(context.Background(), metav1.ListOptions{})
-		if err != nil {
-			panic(err)
-		}
 
 		// Iterate over each pod and checkpoint each container.
-		for _, pod := range pods.Items {
-			klog.Infof("", "pod", pod.Name)
+		containers, err := PrintContainerIDs()
+		if err != nil {
+			klog.ErrorS(err, "unable to print containerIDs")
+		}
 
-			for _, container := range pod.Spec.Containers {
-				klog.Infof("", "container", container.Name)
+		for _, container := range containers {
+			klog.Infof("", "container ->", container)
 
-				// TODO: Check if the container is running.
+			// TODO: Check if the container is running.
 
-				klog.Infof("", "args: ", container.Args)
-
-				// Checkpoint the container.
-				err := r.checkpointPodCrio(ctx, pod.Name, container.Name)
-				if err != nil {
-					klog.ErrorS(err, "unable to checkpoint", "pod", pod.Name, "container", container.Name)
-				} else {
-					klog.Infof("", "checkpointPodCrio ok")
-				}
+			// Checkpoint the container.
+			err := r.checkpointPodCrio(container.ID)
+			if err != nil {
+				klog.ErrorS(err, "unable to checkpoint", "container", container.Name, "ID", container.ID)
+			} else {
+				klog.Infof("", "checkpointPodCrio ok")
 			}
 		}
 	}
+
 	/*
 		err = r.checkpointPodContainerd(ctx, sourcePod, "/var/lib/kubelet/migration/")
 		if err != nil {
@@ -836,19 +816,70 @@ func (r *LiveMigrationReconciler) checkpointPodContainerd(ctx context.Context, p
 	return nil
 }
 
-func (r *LiveMigrationReconciler) checkpointPodCrio(ctx context.Context, podName string, containerName string) error {
+func (r *LiveMigrationReconciler) checkpointPodCrio(containerID string) error {
 	// Construct the cri-o checkpoint command.
-	checkpointCmd := exec.Command("crictl", "checkpoint", "--image-dir=/var/lib/containers")
-	checkpointCmd.Args = append(checkpointCmd.Args, podName)
-	checkpointCmd.Args = append(checkpointCmd.Args, containerName)
+	checkpointCmd := exec.Command("crictl", "checkpoint")
+	checkpointCmd.Args = append(checkpointCmd.Args, containerID)
 
 	// Execute the checkpoint command.
 	output, err := checkpointCmd.CombinedOutput()
 	if err != nil {
-		klog.ErrorS(err, "failed to checkpoint pod", "pod", podName, "container", containerName, "output", string(output))
+		klog.ErrorS(err, "failed to checkpoint container", "container", containerID, "output", string(output))
 	} else {
-		klog.InfoS("checkpointed pod", "pod", podName, "container", containerName, "")
+		klog.InfoS("checkpointed pod", "container", containerID, "output", string(output))
 	}
 
 	return nil
+}
+
+func (r *LiveMigrationReconciler) restorePodCrio() error {
+
+	return nil
+}
+
+type Container struct {
+	ID   string
+	Name string
+}
+
+func PrintContainerIDs() ([]Container, error) {
+	// Load Kubernetes config
+	config, err := clientcmd.BuildConfigFromFlags("", "/home/ubuntu/.kube/config")
+	if err != nil {
+		return nil, fmt.Errorf("failed to load Kubernetes config: %v", err)
+	}
+
+	// Create Kubernetes API client
+	clientset, err := kubernetes.NewForConfig(config)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create Kubernetes client: %v", err)
+	}
+
+	// Get pods in liqo-demo namespace
+	pods, err := clientset.CoreV1().Pods("liqo-demo").List(context.Background(), metav1.ListOptions{})
+	if err != nil {
+		return nil, fmt.Errorf("failed to list pods: %v", err)
+	}
+
+	// Create a slice of Container structs
+	var containers []Container
+
+	// Append the container ID and name for each container in each pod
+	for _, pod := range pods.Items {
+		for _, containerStatus := range pod.Status.ContainerStatuses {
+			idParts := strings.Split(containerStatus.ContainerID, "//")
+			if len(idParts) < 2 {
+				return nil, fmt.Errorf("invalid container ID format: %v", containerStatus.ContainerID)
+			}
+			containerID := idParts[1]
+
+			container := Container{
+				ID:   containerID,
+				Name: containerStatus.Name,
+			}
+			containers = append(containers, container)
+		}
+	}
+
+	return containers, nil
 }
