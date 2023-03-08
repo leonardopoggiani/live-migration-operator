@@ -243,10 +243,13 @@ func (r *LiveMigrationReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 			klog.ErrorS(err, "sourcePod not exist", "pod", annotations["sourcePod"])
 			return ctrl.Result{}, err
 		}
-		if err := r.removeCheckpointPod(ctx, sourcePod, "/var/lib/kubelet/migration/", "", req.Namespace); err != nil {
-			klog.ErrorS(err, "unable to remove checkpoint", "pod", sourcePod)
-			return ctrl.Result{}, err
-		}
+		/*
+			if err := r.removeCheckpointPod(ctx, sourcePod, "/var/lib/kubelet/migration/", "", req.Namespace); err != nil {
+				klog.ErrorS(err, "unable to remove checkpoint", "pod", sourcePod)
+				return ctrl.Result{}, err
+			}
+
+		*/
 		klog.Infof("", "Live-migration", "Step 1 - Check source pod is exist or not - completed")
 		klog.Infof("", "sourcePod ok ", sourcePod)
 		klog.Infof("", "sourcePod status ", sourcePod.Status.Phase)
