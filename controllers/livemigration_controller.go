@@ -26,6 +26,7 @@ import (
 	"github.com/containerd/containerd/namespaces"
 	api "github.com/leonardopoggiani/live-migration-operator/api/v1alpha1"
 	appsv1 "k8s.io/api/apps/v1"
+	core "k8s.io/api/core/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -353,9 +354,10 @@ func (r *LiveMigrationReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 
 	klog.Infof("Migrating pod: %s", migratingPod)
 
-	err = r.restorePodCrio(migratingPod.Name, req.Namespace, "web", "checkpoint", clientset)
+	// TODO: for every container i previously checkpointed, i need to restore it.
+	err = r.restorePodCrio(migratingPod.Name, req.Namespace, "web", "checkpoint", clientset, migratingPod.Spec.DestHost)
 	if err != nil {
-		klog.ErrorS(err, "unable to restore", "pod", migratingPod.Name)
+		klog.ErrorS(err, "unable to restore", "pod", migratingPod.Name, "destinationHost", migratingPod.Spec.DestHost)
 	}
 
 	klog.Infof("", "Live-migration", "Step 4 - Restore destPod from sourcePod's checkpointed info - completed")
@@ -889,7 +891,7 @@ func PrintContainerIDs(clientset *kubernetes.Clientset) ([]Container, error) {
 	return containers, nil
 }
 
-func (r *LiveMigrationReconciler) restorePodCrio(podName string, namespace string, containerName string, checkpointImage string, clientset *kubernetes.Clientset) error {
+func (r *LiveMigrationReconciler) restorePodCrio(podName string, namespace string, containerName string, checkpointImage string, clientset *kubernetes.Clientset, destinationHost string) error {
 
 	podClient := clientset.CoreV1().Pods(namespace)
 	pod, err := podClient.Get(context.Background(), podName, metav1.GetOptions{})
@@ -913,17 +915,11 @@ func (r *LiveMigrationReconciler) restorePodCrio(podName string, namespace strin
 		klog.ErrorS(err, "container not found", "podName", podName, "namespace", namespace, "containerName", containerName)
 	}
 
-	// Create a new container with the checkpoint image
-	containerSpec := &corev1.Container{
-		Name:            containerName,
-		Image:           checkpointImage,
-		ImagePullPolicy: corev1.PullIfNotPresent,
-	}
-	pod.Spec.Containers = append(pod.Spec.Containers, *containerSpec)
+	restoredPod := createRestoredPod(podName, namespace, containerName, checkpointImage, destinationHost)
 
-	klog.Infof("updating pod %s", pod.Spec.Containers)
+	klog.Infof("restored pod %s", restoredPod)
 	// Update the pod
-	_, err = podClient.Update(context.Background(), pod, metav1.UpdateOptions{})
+	_, err = podClient.Update(context.Background(), restoredPod, metav1.UpdateOptions{})
 	if err != nil {
 		klog.ErrorS(err, "failed to update pod", "podName", podName, "namespace", namespace)
 		return err
@@ -948,6 +944,24 @@ func (r *LiveMigrationReconciler) restorePodCrio(podName string, namespace strin
 	}
 
 	return nil
+}
+
+func createRestoredPod(restoredName string, restoredNamespace string, restoredContainerName string, restoredContainerImage string, destinationHost string) *core.Pod {
+	return &core.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      restoredName,
+			Namespace: restoredNamespace,
+		},
+		Spec: core.PodSpec{
+			Containers: []core.Container{
+				{
+					Name:            restoredContainerName,
+					Image:           restoredContainerImage,
+					ImagePullPolicy: core.PullIfNotPresent,
+				},
+			},
+		},
+	}
 }
 
 func (r *LiveMigrationReconciler) waitForContainerReady(podName string, namespace string, containerName string, clientset *kubernetes.Clientset) error {
