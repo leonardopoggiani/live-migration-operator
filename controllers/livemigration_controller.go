@@ -18,7 +18,7 @@ package controllers
 
 import (
 	"context"
-	criu "github.com/checkpoint-restore/go-criu"
+	"github.com/checkpoint-restore/go-criu"
 	"github.com/containerd/containerd"
 	"github.com/containerd/containerd/api/services/tasks/v1"
 	"github.com/containerd/containerd/cio"
@@ -26,12 +26,14 @@ import (
 	api "github.com/leonardopoggiani/live-migration-operator/api/v1alpha1"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/rest"
 	"k8s.io/klog/v2"
 	"math/rand"
 	"os"
 	"os/exec"
-	"path"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"strconv"
@@ -251,7 +253,48 @@ func (r *LiveMigrationReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 			And if i do the checkpoints concurrently?
 		*/
 
-		err = r.checkpointPodCriu(ctx, sourcePod, "/var/lib/kubelet/migration/")
+		//******* CRI-O ******* //
+		// Get all running pods in the default namespace.
+		// Get the Kubernetes client configuration.
+		config, err := rest.InClusterConfig()
+		if err != nil {
+			panic(err)
+		}
+
+		// Create the Kubernetes clientset.
+		cl, err := kubernetes.NewForConfig(config)
+		if err != nil {
+			panic(err)
+		}
+
+		pods, err := cl.CoreV1().Pods("liqo-demo").List(context.Background(), metav1.ListOptions{})
+		if err != nil {
+			panic(err)
+		}
+
+		// Iterate over each pod and checkpoint each container.
+		for _, pod := range pods.Items {
+			klog.Infof("", "pod", pod.Name)
+
+			for _, container := range pod.Spec.Containers {
+				klog.Infof("", "container", container.Name)
+
+				// TODO: Check if the container is running.
+
+				klog.Infof("", "args: ", container.Args)
+
+				// Checkpoint the container.
+				err := r.checkpointPodCrio(ctx, pod.Name, container.Name)
+				if err != nil {
+					klog.ErrorS(err, "unable to checkpoint", "pod", pod.Name, "container", container.Name)
+				} else {
+					klog.Infof("", "checkpointPodCrio ok")
+				}
+			}
+		}
+	}
+	/*
+		err = r.checkpointPodContainerd(ctx, sourcePod, "/var/lib/kubelet/migration/")
 		if err != nil {
 			return ctrl.Result{}, err
 		} else {
@@ -262,25 +305,27 @@ func (r *LiveMigrationReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 			klog.ErrorS(err, "unable to checkpoint", "pod", sourcePod)
 			return ctrl.Result{}, err
 		}
+	*/
 
-		klog.Infof("", "Live-migration", "Step 2 - checkpoint source Pod - completed")
-		// TODO(TUONG): make migrate all container inside Pod
-		// for container := range copySourcePod.Spec.Containers {
-		// 	fmt.Println(copySourcePod.Spec.Containers[container].Name)
-		// 	klog.Infof("", "container of pod", copySourcePod.Spec.Containers[container].Name)
-		// }
+	klog.Infof("", "Live-migration", "Step 2 - checkpoint source Pod - completed")
+	// TODO(TUONG): make migrate all container inside Pod
+	// for container := range copySourcePod.Spec.Containers {
+	// 	fmt.Println(copySourcePod.Spec.Containers[container].Name)
+	// 	klog.Infof("", "container of pod", copySourcePod.Spec.Containers[container].Name)
+	// }
 
-		// at this moment just loop the containers inside a pod, later it must checkpoint and restore every container
-		// inside the pod.
-		for container := range sourcePod.Spec.Containers {
-			klog.Infof("", "container --> ", sourcePod.Spec.Containers[container].Name)
-		}
+	// at this moment just loop the containers inside a pod, later it must checkpoint and restore every container
+	// inside the pod.
+	// for container := range sourcePod.Spec.Containers {
+	//	klog.Infof("", "container --> ", sourcePod.Spec.Containers[container].Name)
+	//}
 
-		// Step3: wait until checkpoint info are created
-		container := sourcePod.Spec.Containers[0].Name // = web
-		// multi-containers: [ web | db ]
+	// Step3: wait until checkpoint info are created
+	//container := sourcePod.Spec.Containers[0].Name // = web
+	// multi-containers: [ web | db ]
 
-		// change the path to check, may no be anymore this one may also need to understand how checkpoint is done now
+	// change the path to check, may no be anymore this one may also need to understand how checkpoint is done now
+	/*
 		checkpointPath := path.Join("/var/lib/kubelet/migration/", sourcePod.Name) // = multi-container-pod
 		klog.Infof("", "checkpointPath: ", checkpointPath)                         // = /var/lib/kubelet/migration/multi-container-pod
 		klog.Infof("", "live-migration pod", container)                            // = web
@@ -297,17 +342,23 @@ func (r *LiveMigrationReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 			}
 		}
 
-		klog.Infof("", "Live-migration", "checkpointPath"+checkpointPath)
-		klog.Infof("", "Live-migration", "Step 3 - Wait until checkpoint info are created - completed")
-		time.Sleep(10)
-		// Step4: restore destPod from sourcePod checkpoted info
-		newPod, err := r.restorePod(ctx, pod, annotations["sourcePod"], checkpointPath)
+	*/
+
+	// klog.Infof("", "Live-migration", "checkpointPath"+checkpointPath)
+	klog.Infof("", "Live-migration", "Step 3 - Wait until checkpoint info are created - completed")
+	time.Sleep(10)
+	// Step4: restore destPod from sourcePod checkpoted info
+	// newPod, err := r.restorePod(ctx, pod, annotations["sourcePod"], checkpointPath)
+	/*
 		if err != nil {
 			klog.ErrorS(err, "unable to restore", "pod", sourcePod)
 			return ctrl.Result{}, err
 		}
-		klog.Infof("", "Live-migration", "Step 4 - Restore destPod from sourcePod's checkpointed info - completed")
-		// time.Sleep(5)
+
+	*/
+	klog.Infof("", "Live-migration", "Step 4 - Restore destPod from sourcePod's checkpointed info - completed")
+	// time.Sleep(5)
+	/*
 		for {
 			status, _ := r.checkPodExist(ctx, newPod.Name, req.Namespace)
 			if status != nil {
@@ -317,70 +368,75 @@ func (r *LiveMigrationReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 				time.Sleep(200 * time.Millisecond)
 			}
 		}
-		klog.Infof("", "Live-migration", "Step 4.1 - Check whether if newPod is Running or not - completed")
-		// Step5: Clean checkpointpod process and checkpointPath
-		// if err := r.removeCheckpointPod(ctx, sourcePod, "/var/lib/kubelet/migration/", newPod.Name, req.Namespace); err != nil {
-		// 	klog.ErrorS(err, "unable to remove checkpoint", "pod", sourcePod)
-		// 	return ctrl.Result{}, err
-		// }
-		// klog.Infof("", "Live-migration", "Step 5 - Clean checkpointPod process and checkpointPath - completed")
 
-		// // Step6: Delete source Pod
-		if err := r.deletePod(ctx, sourcePod); err != nil {
-			klog.ErrorS(err, "unable to delete", "source pod", sourcePod)
-			return ctrl.Result{}, err
+	*/
+	klog.Infof("", "Live-migration", "Step 4.1 - Check whether if newPod is Running or not - completed")
+	// Step5: Clean checkpointpod process and checkpointPath
+	// if err := r.removeCheckpointPod(ctx, sourcePod, "/var/lib/kubelet/migration/", newPod.Name, req.Namespace); err != nil {
+	// 	klog.ErrorS(err, "unable to remove checkpoint", "pod", sourcePod)
+	// 	return ctrl.Result{}, err
+	// }
+	// klog.Infof("", "Live-migration", "Step 5 - Clean checkpointPod process and checkpointPath - completed")
+
+	// // Step6: Delete source Pod
+	/*
+			if err := r.deletePod(ctx, sourcePod); err != nil {
+				klog.ErrorS(err, "unable to delete", "source pod", sourcePod)
+				return ctrl.Result{}, err
+			}
+			klog.Infof("", "Live-migration", "Step 6 - Delete the source pod - completed")
+			return ctrl.Result{}, nil
 		}
-		klog.Infof("", "Live-migration", "Step 6 - Delete the source pod - completed")
-		return ctrl.Result{}, nil
-	}
-	if count == 0 && annotations["snapshotPolicy"] == "restore" {
-		// We are restoring pods here - Warm scale
-		_, err := os.Stat(annotations["snapshotPath"])
-		if annotations["snapshotPolicy"] != "restore" && os.IsNotExist(err) {
-			pod.ObjectMeta.Annotations["snapshotPolicy"] = ""
-			pod.ObjectMeta.Annotations["snapshotPath"] = ""
-		}
-		if err := r.createMultiPod(ctx, migratingPod.Spec.Replicas, depl); err != nil {
-			klog.ErrorS(err, "unable to create Pod for restore", "pod", pod)
-			return ctrl.Result{}, err
-		}
-		klog.Infof("", "Restore", "Step 0 - Create multiple pods from checkpoint infomation - completed")
-	} else if count != 0 && count != migratingPod.Spec.Replicas {
-		_, err := os.Stat(annotations["snapshotPath"])
-		if annotations["snapshotPolicy"] != "restore" && os.IsNotExist(err) {
-			pod.ObjectMeta.Annotations["snapshotPolicy"] = ""
-			pod.ObjectMeta.Annotations["snapshotPath"] = ""
-		}
-		if err := r.updateMultiPod(ctx, migratingPod.Spec.Replicas-count, depl); err != nil {
-			klog.ErrorS(err, "unable to create Pod for restore", "pod", pod)
-			return ctrl.Result{}, err
-		}
-		klog.Infof("", "Restore", "Step 0 - Scale multiple pods from checkpoint infomation - completed")
-	} else {
-		// We are checkpointing a running pod here
-		if annotations["snapshotPolicy"] == "checkpoint" && annotations["sourcePod"] != "" {
+		if count == 0 && annotations["snapshotPolicy"] == "restore" {
+			// We are restoring pods here - Warm scale
 			_, err := os.Stat(annotations["snapshotPath"])
-			// Step1: Check source pod is exist or not
-			sourcePod, err := r.checkPodExist(ctx, annotations["sourcePod"], req.Namespace)
-			if err != nil || sourcePod == nil {
-				klog.ErrorS(err, "sourcePod not exist", "pod", annotations["sourcePod"])
+			if annotations["snapshotPolicy"] != "restore" && os.IsNotExist(err) {
+				pod.ObjectMeta.Annotations["snapshotPolicy"] = ""
+				pod.ObjectMeta.Annotations["snapshotPath"] = ""
+			}
+			if err := r.createMultiPod(ctx, migratingPod.Spec.Replicas, depl); err != nil {
+				klog.ErrorS(err, "unable to create Pod for restore", "pod", pod)
 				return ctrl.Result{}, err
 			}
-			klog.Infof("", "Checkpoint", "Step 1 - Check the snapshotPaht is exist or not - completed")
-			// Step2: Clean previous checkpoint folder if exist
-			if err := r.removeCheckpointPod(ctx, sourcePod, annotations["snapshotPath"], "", req.Namespace); err != nil {
-				klog.ErrorS(err, "unable to remove checkpoint", "pod", sourcePod)
+			klog.Infof("", "Restore", "Step 0 - Create multiple pods from checkpoint infomation - completed")
+		} else if count != 0 && count != migratingPod.Spec.Replicas {
+			_, err := os.Stat(annotations["snapshotPath"])
+			if annotations["snapshotPolicy"] != "restore" && os.IsNotExist(err) {
+				pod.ObjectMeta.Annotations["snapshotPolicy"] = ""
+				pod.ObjectMeta.Annotations["snapshotPath"] = ""
+			}
+			if err := r.updateMultiPod(ctx, migratingPod.Spec.Replicas-count, depl); err != nil {
+				klog.ErrorS(err, "unable to create Pod for restore", "pod", pod)
 				return ctrl.Result{}, err
 			}
-			klog.Infof("", "Checkpoint", "Step 2 - Clean previous checkpoint folder if exist - completed")
-			// Step3: Checkpoint the source pod now
-			if err := r.checkpointPod(ctx, sourcePod, annotations["snapshotPath"]); err != nil {
-				klog.ErrorS(err, "unable to checkpoint", "pod", sourcePod)
-				return ctrl.Result{}, err
+			klog.Infof("", "Restore", "Step 0 - Scale multiple pods from checkpoint infomation - completed")
+		} else {
+			// We are checkpointing a running pod here
+			if annotations["snapshotPolicy"] == "checkpoint" && annotations["sourcePod"] != "" {
+				_, err := os.Stat(annotations["snapshotPath"])
+				// Step1: Check source pod is exist or not
+				sourcePod, err := r.checkPodExist(ctx, annotations["sourcePod"], req.Namespace)
+				if err != nil || sourcePod == nil {
+					klog.ErrorS(err, "sourcePod not exist", "pod", annotations["sourcePod"])
+					return ctrl.Result{}, err
+				}
+				klog.Infof("", "Checkpoint", "Step 1 - Check the snapshotPaht is exist or not - completed")
+				// Step2: Clean previous checkpoint folder if exist
+				if err := r.removeCheckpointPod(ctx, sourcePod, annotations["snapshotPath"], "", req.Namespace); err != nil {
+					klog.ErrorS(err, "unable to remove checkpoint", "pod", sourcePod)
+					return ctrl.Result{}, err
+				}
+				klog.Infof("", "Checkpoint", "Step 2 - Clean previous checkpoint folder if exist - completed")
+				// Step3: Checkpoint the source pod now
+				if err := r.checkpointPod(ctx, sourcePod, annotations["snapshotPath"]); err != nil {
+					klog.ErrorS(err, "unable to checkpoint", "pod", sourcePod)
+					return ctrl.Result{}, err
+				}
+				klog.Infof("", "Checkpoint", "Step 3 - Checkpoint source Pod and save it - completed")
 			}
-			klog.Infof("", "Checkpoint", "Step 3 - Checkpoint source Pod and save it - completed")
 		}
-	}
+
+	*/
 	return ctrl.Result{}, nil
 }
 
@@ -543,7 +599,7 @@ func (r *LiveMigrationReconciler) updateAnnotations(ctx context.Context, pod *co
 	return nil
 }
 
-func (r *LiveMigrationReconciler) checkpointPodCriu(ctx context.Context, pod *corev1.Pod, snapshotPath string) error {
+func (r *LiveMigrationReconciler) checkpointPodContainerd(ctx context.Context, pod *corev1.Pod, snapshotPath string) error {
 
 	cr := criu.MakeCriu()
 	err := cr.Prepare()
@@ -776,5 +832,23 @@ func (r *LiveMigrationReconciler) checkpointPodCriu(ctx context.Context, pod *co
 		}
 
 	*/
+
+	return nil
+}
+
+func (r *LiveMigrationReconciler) checkpointPodCrio(ctx context.Context, podName string, containerName string) error {
+	// Construct the cri-o checkpoint command.
+	checkpointCmd := exec.Command("crictl", "checkpoint", "--image-dir=/var/lib/containers")
+	checkpointCmd.Args = append(checkpointCmd.Args, podName)
+	checkpointCmd.Args = append(checkpointCmd.Args, containerName)
+
+	// Execute the checkpoint command.
+	output, err := checkpointCmd.CombinedOutput()
+	if err != nil {
+		klog.ErrorS(err, "failed to checkpoint pod", "pod", podName, "container", containerName, "output", string(output))
+	} else {
+		klog.InfoS("checkpointed pod", "pod", podName, "container", containerName, "")
+	}
+
 	return nil
 }
