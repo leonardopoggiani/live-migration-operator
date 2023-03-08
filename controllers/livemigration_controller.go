@@ -359,6 +359,7 @@ func (r *LiveMigrationReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 	klog.Infof("Migrating pod: %s", migratingPod)
 
 	// first I need to terminate the checkpointed pod
+	t := time.Now()
 	err = r.terminateCheckpointedPod(ctx, migratingPod.Name, clientset)
 	if err != nil {
 		klog.ErrorS(err, "unable to terminate checkpointed pod", "pod", migratingPod.Name)
@@ -367,7 +368,16 @@ func (r *LiveMigrationReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 	}
 
 	// TODO: for every container i previously checkpointed, i need to restore it.
-	err = r.restorePodCrio(migratingPod.Name, req.Namespace, "web", "checkpoint", clientset, migratingPod.Spec.DestHost)
+	// what i have to use on the checkpointImage?
+	// building image with buildah
+	err = createCheckpointImage(migratingPod.Name, "liqo-demo", "web", t.String())
+	if err != nil {
+		klog.ErrorS(err, "unable to create checkpoint image", "pod", migratingPod.Name)
+	} else {
+		klog.Infof("checkpoint image created")
+	}
+
+	err = r.restorePodCrio(migratingPod.Name, req.Namespace, "web", "docker.io/leonardopoggiani/checkpoint-image:latest", clientset, migratingPod.Spec.DestHost)
 	if err != nil {
 		klog.ErrorS(err, "unable to restore", "pod", migratingPod.Name, "destinationHost", migratingPod.Spec.DestHost)
 	}
@@ -911,10 +921,9 @@ func (r *LiveMigrationReconciler) restorePodCrio(podName string, namespace strin
 	podClient := clientset.CoreV1().Pods(namespace)
 	pod, err := podClient.Get(context.Background(), podName, metav1.GetOptions{})
 	if err != nil {
-		klog.ErrorS(err, "failed to get pod", "podName", podName, "namespace", namespace)
-		return err
+		klog.Infof("Pod is deleted", "podName", podName, "namespace", namespace)
 	} else {
-		klog.InfoS("got pod", "podName", podName, "namespace", namespace)
+		klog.Errorf("Pod is not correctly deleted!", "podName", podName, "namespace", namespace)
 	}
 
 	// Find the container to restore.
@@ -928,7 +937,7 @@ func (r *LiveMigrationReconciler) restorePodCrio(podName string, namespace strin
 	}
 
 	if container == nil {
-		klog.ErrorS(err, "container not found", "podName", podName, "namespace", namespace, "containerName", containerName)
+		klog.Infof("container not found", "podName", podName, "namespace", namespace, "containerName", containerName)
 	}
 
 	restoredPod := createRestoredPod(podName, namespace, containerName, checkpointImage, destinationHost)
@@ -1073,4 +1082,40 @@ func waitForPodDeletion(ctx context.Context, podName string, clientset *kubernet
 	}
 
 	return fmt.Errorf("pod %s not found or already deleted", podName)
+}
+
+func createCheckpointImage(podName, namespaceName, containerName, timestamp string) error {
+	newContainerCmd := exec.Command("buildah", "from", "scratch")
+	newContainerOutput, err := newContainerCmd.Output()
+	if err != nil {
+		return fmt.Errorf("failed to create new container: %v", err)
+	}
+	newContainer := string(newContainerOutput)
+
+	addCheckpointCmd := exec.Command("buildah", "add", newContainer, "/var/lib/kubelet/checkpoints/checkpoint-"+podName+"_"+namespaceName+"-"+containerName+"-"+timestamp+".tar", "/")
+	if err := addCheckpointCmd.Run(); err != nil {
+		return fmt.Errorf("failed to add checkpoint to container: %v", err)
+	}
+
+	configCheckpointCmd := exec.Command("buildah", "config", "--annotation=io.kubernetes.cri-o.annotations.checkpoint.name="+containerName, newContainer)
+	if err := configCheckpointCmd.Run(); err != nil {
+		return fmt.Errorf("failed to configure checkpoint annotation: %v", err)
+	}
+
+	commitCheckpointCmd := exec.Command("buildah", "commit", newContainer, "localhost/checkpoint-image:latest")
+	if err := commitCheckpointCmd.Run(); err != nil {
+		return fmt.Errorf("failed to commit checkpoint image: %v", err)
+	}
+
+	pushCheckpointCmd := exec.Command("buildah", "push", "localhost/checkpoint-image:latest", "docker.io/leonardopoggiani/checkpoint-image:latest")
+	if err := pushCheckpointCmd.Run(); err != nil {
+		return fmt.Errorf("failed to push checkpoint image to container image registry: %v", err)
+	}
+
+	rmContainerCmd := exec.Command("buildah", "rm", newContainer)
+	if err := rmContainerCmd.Run(); err != nil {
+		return fmt.Errorf("failed to remove container: %v", err)
+	}
+
+	return nil
 }
