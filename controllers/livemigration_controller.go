@@ -265,7 +265,7 @@ func (r *LiveMigrationReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 			And if i do the checkpoints concurrently?
 		*/
 
-		//******* CRI-O ******* //
+		// ******* CRI-O ******* //
 		// Get all running pods in the default namespace.
 		// Get the Kubernetes client configuration.
 
@@ -869,6 +869,8 @@ func (r *LiveMigrationReconciler) checkpointPodCrio(containerID string) error {
 	// Construct the cri-o checkpoint command.
 	checkpointCmd := exec.Command("crictl", "checkpoint")
 	checkpointCmd.Args = append(checkpointCmd.Args, containerID)
+	checkpointCmd.Args = append(checkpointCmd.Args, "--tcp-established")
+	checkpointCmd.Args = append(checkpointCmd.Args, "--external /tmp/checkpoint")
 
 	// Execute the checkpoint command.
 	output, err := checkpointCmd.CombinedOutput()
