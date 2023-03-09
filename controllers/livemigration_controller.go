@@ -870,7 +870,7 @@ func (r *LiveMigrationReconciler) checkpointPodContainerd(ctx context.Context, p
 func (r *LiveMigrationReconciler) checkpointPodCrio(containerID string) error {
 	// Construct the cri-o checkpoint command.
 	checkpointCmd := exec.Command("crictl", "checkpoint")
-	checkpointCmd.Args = append(checkpointCmd.Args, "--export=/tmp/checkpoint/"+containerID+".tar")
+	checkpointCmd.Args = append(checkpointCmd.Args, "--export=/tmp/checkpoint/"+containerID)
 	checkpointCmd.Args = append(checkpointCmd.Args, containerID)
 
 	// Execute the checkpoint command.
