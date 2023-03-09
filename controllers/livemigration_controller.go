@@ -282,6 +282,7 @@ func (r *LiveMigrationReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 
 			// Checkpoint the container.
 			err := r.checkpointPodCrio(container.ID)
+
 			if err != nil {
 				klog.ErrorS(err, "unable to checkpoint", "container", container.Name, "ID", container.ID)
 			} else {
@@ -359,7 +360,6 @@ func (r *LiveMigrationReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 	klog.Infof("Migrating pod: %s", migratingPod)
 
 	// first I need to terminate the checkpointed pod
-	t := time.Now()
 	err = r.terminateCheckpointedPod(ctx, migratingPod.Name, clientset)
 	if err != nil {
 		klog.ErrorS(err, "unable to terminate checkpointed pod", "pod", migratingPod.Name)
@@ -370,7 +370,9 @@ func (r *LiveMigrationReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 	// TODO: for every container i previously checkpointed, i need to restore it.
 	// what i have to use on the checkpointImage?
 	// building image with buildah
-	err = createCheckpointImage(migratingPod.Name, "liqo-demo", "web", t.String())
+	containers, err := PrintContainerIDs(clientset)
+
+	err = createCheckpointImage(containers)
 	if err != nil {
 		klog.ErrorS(err, "unable to create checkpoint image", "pod", migratingPod.Name)
 	} else {
@@ -868,8 +870,8 @@ func (r *LiveMigrationReconciler) checkpointPodContainerd(ctx context.Context, p
 func (r *LiveMigrationReconciler) checkpointPodCrio(containerID string) error {
 	// Construct the cri-o checkpoint command.
 	checkpointCmd := exec.Command("crictl", "checkpoint")
+	checkpointCmd.Args = append(checkpointCmd.Args, "--external /tmp/checkpoint/"+containerID+".tar")
 	checkpointCmd.Args = append(checkpointCmd.Args, containerID)
-	checkpointCmd.Args = append(checkpointCmd.Args, "--external /tmp/checkpoint")
 
 	// Execute the checkpoint command.
 	output, err := checkpointCmd.CombinedOutput()
@@ -1085,38 +1087,42 @@ func waitForPodDeletion(ctx context.Context, podName string, clientset *kubernet
 	return fmt.Errorf("pod %s not found or already deleted", podName)
 }
 
-func createCheckpointImage(podName, namespaceName, containerName, timestamp string) error {
-	newContainerCmd := exec.Command("buildah", "from", "scratch")
-	newContainerOutput, err := newContainerCmd.Output()
-	if err != nil {
-		return fmt.Errorf("failed to create new container: %v", err)
-	}
-	newContainer := string(newContainerOutput)
+func createCheckpointImage(containers []Container) error {
 
-	klog.Infof("", "checkpoint path -> ", "/var/lib/kubelet/checkpoints/checkpoint-"+podName+"_"+namespaceName+"-"+containerName+"-"+timestamp+".tar")
-	addCheckpointCmd := exec.Command("buildah", "add", newContainer, "/var/lib/kubelet/checkpoints/checkpoint-"+podName+"_"+namespaceName+"-"+containerName+"-"+timestamp+".tar", "/")
-	if err := addCheckpointCmd.Run(); err != nil {
-		return fmt.Errorf("failed to add checkpoint to container: %v", err)
-	}
+	for _, container := range containers {
+		newContainerCmd := exec.Command("buildah", "from", "scratch")
+		newContainerOutput, err := newContainerCmd.Output()
+		if err != nil {
+			return fmt.Errorf("failed to create new container: %v", err)
+		}
+		newContainer := string(newContainerOutput)
 
-	configCheckpointCmd := exec.Command("buildah", "config", "--annotation=io.kubernetes.cri-o.annotations.checkpoint.name="+containerName, newContainer)
-	if err := configCheckpointCmd.Run(); err != nil {
-		return fmt.Errorf("failed to configure checkpoint annotation: %v", err)
-	}
+		klog.Infof("", "checkpoint path -> ", "/tmp/checkpoint/"+container.ID+".tar")
+		addCheckpointCmd := exec.Command("buildah", "add", newContainer, "/tmp/checkpoint/"+container.ID+".tar", "/")
+		if err := addCheckpointCmd.Run(); err != nil {
+			return fmt.Errorf("failed to add checkpoint to container: %v", err)
+		}
 
-	commitCheckpointCmd := exec.Command("buildah", "commit", newContainer, "localhost/checkpoint-image:latest")
-	if err := commitCheckpointCmd.Run(); err != nil {
-		return fmt.Errorf("failed to commit checkpoint image: %v", err)
-	}
+		configCheckpointCmd := exec.Command("buildah", "config", "--annotation=io.kubernetes.cri-o.annotations.checkpoint.name="+container.Name, newContainer)
+		if err := configCheckpointCmd.Run(); err != nil {
+			return fmt.Errorf("failed to configure checkpoint annotation: %v", err)
+		}
 
-	pushCheckpointCmd := exec.Command("buildah", "push", "localhost/checkpoint-image:latest", "docker.io/leonardopoggiani/checkpoint-image:latest")
-	if err := pushCheckpointCmd.Run(); err != nil {
-		return fmt.Errorf("failed to push checkpoint image to container image registry: %v", err)
-	}
+		commitCheckpointCmd := exec.Command("buildah", "commit", newContainer, "localhost/checkpoint-image:latest")
+		if err := commitCheckpointCmd.Run(); err != nil {
+			return fmt.Errorf("failed to commit checkpoint image: %v", err)
+		}
 
-	rmContainerCmd := exec.Command("buildah", "rm", newContainer)
-	if err := rmContainerCmd.Run(); err != nil {
-		return fmt.Errorf("failed to remove container: %v", err)
+		pushCheckpointCmd := exec.Command("buildah", "push", "localhost/checkpoint-image:latest", "docker.io/leonardopoggiani/checkpoint-image:latest")
+		if err := pushCheckpointCmd.Run(); err != nil {
+			return fmt.Errorf("failed to push checkpoint image to container image registry: %v", err)
+		}
+
+		rmContainerCmd := exec.Command("buildah", "rm", newContainer)
+		if err := rmContainerCmd.Run(); err != nil {
+			return fmt.Errorf("failed to remove container: %v", err)
+		}
+
 	}
 
 	return nil
