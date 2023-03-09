@@ -893,7 +893,7 @@ func (r *LiveMigrationReconciler) checkpointPodCrio(containerID string) error {
 	} else {
 		klog.InfoS("gave privilege", "container", containerID, "output", string(output))
 	}
-	
+
 	return nil
 }
 
@@ -1091,6 +1091,7 @@ func waitForPodDeletion(ctx context.Context, podName string, clientset *kubernet
 func createCheckpointImage(containers []Container) error {
 
 	for _, container := range containers {
+
 		newContainerCmd := exec.Command("buildah", "from", "scratch")
 		newContainerOutput, err := newContainerCmd.Output()
 		if err != nil {
@@ -1100,7 +1101,8 @@ func createCheckpointImage(containers []Container) error {
 
 		klog.Infof("", "new container name", newContainer)
 		klog.Infof("", "checkpoint path -> ", "/home/ubuntu/checkpoint/"+container.ID+".tar")
-		addCheckpointCmd := exec.Command("buildah", "add", newContainer, "/home/ubuntu/checkpoint/"+container.ID+".tar", "/")
+
+		addCheckpointCmd := exec.Command("buildah", "add", "working-container", "/home/ubuntu/checkpoint/"+container.ID+".tar", "/")
 		if err = addCheckpointCmd.Run(); err != nil {
 			return fmt.Errorf("failed to add checkpoint to container: %v", err)
 		}
