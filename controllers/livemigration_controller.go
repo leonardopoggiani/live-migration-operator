@@ -875,7 +875,7 @@ func (r *LiveMigrationReconciler) checkpointPodContainerd(ctx context.Context, p
 func (r *LiveMigrationReconciler) checkpointPodCrio(containerID string) error {
 	// Construct the cri-o checkpoint command.
 	checkpointCmd := exec.Command("crictl", "checkpoint")
-	checkpointCmd.Args = append(checkpointCmd.Args, "--export=/tmp/checkpoint/"+containerID+".tar")
+	checkpointCmd.Args = append(checkpointCmd.Args, "--export=/home/ubuntu/checkpoint/"+containerID+".tar")
 	checkpointCmd.Args = append(checkpointCmd.Args, containerID)
 
 	// Execute the checkpoint command.
@@ -1090,29 +1090,30 @@ func createCheckpointImage(containers []Container) error {
 		}
 		newContainer := string(newContainerOutput)
 
-		klog.Infof("", "checkpoint path -> ", "/tmp/checkpoint/"+container.ID+".tar")
-		addCheckpointCmd := exec.Command("sudo", "buildah", "add", newContainer, "/tmp/checkpoint/"+container.ID+".tar", "/")
-		if err := addCheckpointCmd.Run(); err != nil {
+		klog.Infof("", "new container name", newContainer)
+		klog.Infof("", "checkpoint path -> ", "/home/ubuntu/checkpoint/"+container.ID+".tar")
+		addCheckpointCmd := exec.Command("buildah", "add", newContainer, "/home/ubuntu/checkpoint/"+container.ID+".tar", "/")
+		if err = addCheckpointCmd.Run(); err != nil {
 			return fmt.Errorf("failed to add checkpoint to container: %v", err)
 		}
 
 		configCheckpointCmd := exec.Command("buildah", "config", "--annotation=io.kubernetes.cri-o.annotations.checkpoint.name="+container.Name, newContainer)
-		if err := configCheckpointCmd.Run(); err != nil {
+		if err = configCheckpointCmd.Run(); err != nil {
 			return fmt.Errorf("failed to configure checkpoint annotation: %v", err)
 		}
 
 		commitCheckpointCmd := exec.Command("buildah", "commit", newContainer, "localhost/checkpoint-image:latest")
-		if err := commitCheckpointCmd.Run(); err != nil {
+		if err = commitCheckpointCmd.Run(); err != nil {
 			return fmt.Errorf("failed to commit checkpoint image: %v", err)
 		}
 
 		pushCheckpointCmd := exec.Command("buildah", "push", "localhost/checkpoint-image:latest", "leonardopoggiani/checkpoint-images:"+container.ID)
-		if err := pushCheckpointCmd.Run(); err != nil {
+		if err = pushCheckpointCmd.Run(); err != nil {
 			return fmt.Errorf("failed to push checkpoint image to container image registry: %v", err)
 		}
 
 		rmContainerCmd := exec.Command("buildah", "rm", newContainer)
-		if err := rmContainerCmd.Run(); err != nil {
+		if err = rmContainerCmd.Run(); err != nil {
 			return fmt.Errorf("failed to remove container: %v", err)
 		}
 	}
