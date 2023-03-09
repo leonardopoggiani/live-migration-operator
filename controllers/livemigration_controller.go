@@ -869,7 +869,6 @@ func (r *LiveMigrationReconciler) checkpointPodCrio(containerID string) error {
 	// Construct the cri-o checkpoint command.
 	checkpointCmd := exec.Command("crictl", "checkpoint")
 	checkpointCmd.Args = append(checkpointCmd.Args, containerID)
-	checkpointCmd.Args = append(checkpointCmd.Args, "--tcp-established")
 	checkpointCmd.Args = append(checkpointCmd.Args, "--external /tmp/checkpoint")
 
 	// Execute the checkpoint command.
