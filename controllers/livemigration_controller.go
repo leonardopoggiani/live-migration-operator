@@ -1102,6 +1102,7 @@ func createCheckpointImage(containers []Container) error {
 		klog.Infof("", "new container name", newContainer)
 		klog.Infof("", "checkpoint path -> ", "/home/ubuntu/checkpoint/"+container.ID+".tar")
 
+		klog.Infof("", "buildah", "add", newContainer, "/home/ubuntu/checkpoint/"+container.ID+".tar", "/")
 		addCheckpointCmd := exec.Command("buildah", "add", newContainer, "/home/ubuntu/checkpoint/"+container.ID+".tar", "/")
 
 		err = addCheckpointCmd.Run()
