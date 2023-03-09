@@ -272,7 +272,7 @@ func (r *LiveMigrationReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 		// Get the Kubernetes client configuration.
 
 		// Iterate over each pod and checkpoint each container.
-		containers, err := PrintContainerIDs(clientset)
+		containers, err = PrintContainerIDs(clientset)
 		if err != nil {
 			klog.ErrorS(err, "unable to print containerIDs")
 		}
@@ -373,6 +373,10 @@ func (r *LiveMigrationReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 	// what i have to use on the checkpointImage?
 	// building image with buildah
 
+	for _, container := range containers {
+		klog.Infof("", "container ->", container)
+	}
+	
 	err = createCheckpointImage(containers)
 	if err != nil {
 		klog.ErrorS(err, "unable to create checkpoint image", "pod", migratingPod.Name)
