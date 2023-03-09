@@ -376,7 +376,7 @@ func (r *LiveMigrationReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 	for _, container := range containers {
 		klog.Infof("", "container ->", container)
 	}
-	
+
 	err = createCheckpointImage(containers)
 	if err != nil {
 		klog.ErrorS(err, "unable to create checkpoint image", "pod", migratingPod.Name)
@@ -384,7 +384,7 @@ func (r *LiveMigrationReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 		klog.Infof("checkpoint image created")
 	}
 
-	err = r.restorePodCrio(migratingPod.Name, req.Namespace, "web", "docker.io/leonardopoggiani/checkpoint-image:latest", clientset, migratingPod.Spec.DestHost)
+	err = r.restorePodCrio(migratingPod.Name, req.Namespace, containers, clientset, migratingPod.Spec.DestHost)
 	if err != nil {
 		klog.ErrorS(err, "unable to restore", "pod", migratingPod.Name, "destinationHost", migratingPod.Spec.DestHost)
 	}
@@ -924,74 +924,62 @@ func PrintContainerIDs(clientset *kubernetes.Clientset) ([]Container, error) {
 	return containers, nil
 }
 
-func (r *LiveMigrationReconciler) restorePodCrio(podName string, namespace string, containerName string, checkpointImage string, clientset *kubernetes.Clientset, destinationHost string) error {
+func (r *LiveMigrationReconciler) restorePodCrio(podName string, namespace string, containers []Container, clientset *kubernetes.Clientset, destinationHost string) error {
 
 	podClient := clientset.CoreV1().Pods(namespace)
-	pod, err := podClient.Get(context.Background(), podName, metav1.GetOptions{})
+	_, err := podClient.Get(context.Background(), podName, metav1.GetOptions{})
 	if err != nil {
 		klog.Infof("Pod is deleted", "podName", podName, "namespace", namespace)
 	} else {
 		klog.Errorf("Pod is not correctly deleted!", "podName", podName, "namespace", namespace)
 	}
 
-	// Find the container to restore.
-	var container *corev1.ContainerStatus
-	for i := range pod.Status.ContainerStatuses {
-		if pod.Status.ContainerStatuses[i].Name == containerName {
-			container = &pod.Status.ContainerStatuses[i]
-			klog.InfoS("found container", "container", container.Name)
-			break
+	restoredPod := createRestoredPod(podName, namespace, destinationHost)
+
+	for _, container := range containers {
+
+		newContainer := core.Container{
+			Name:  container.Name,
+			Image: "leonardopoggiani/checkpoint-images:" + container.ID,
 		}
-	}
+		restoredPod.Spec.Containers = append(restoredPod.Spec.Containers, newContainer)
 
-	if container == nil {
-		klog.Infof("container not found", "podName", podName, "namespace", namespace, "containerName", containerName)
-	}
+		klog.Infof("restored pod %s", restoredPod)
+		// Update the pod
+		_, err = podClient.Create(context.Background(), restoredPod, metav1.CreateOptions{})
+		if err != nil {
+			klog.ErrorS(err, "failed to update pod", "podName", podName, "namespace", namespace)
+			return err
+		}
 
-	restoredPod := createRestoredPod(podName, namespace, containerName, checkpointImage, destinationHost)
+		// Wait for the new container to become ready.
+		err = r.waitForContainerReady(podName, namespace, container.Name, clientset)
+		if err != nil {
+			klog.ErrorS(err, "container did not become ready", "podName", podName, "namespace", namespace, "containerName", container.Name)
+			return err
+		}
 
-	klog.Infof("restored pod %s", restoredPod)
-	// Update the pod
-	_, err = podClient.Create(context.Background(), restoredPod, metav1.CreateOptions{})
-	if err != nil {
-		klog.ErrorS(err, "failed to update pod", "podName", podName, "namespace", namespace)
-		return err
-	}
-
-	// Wait for the new container to become ready.
-	err = r.waitForContainerReady(podName, namespace, containerName, clientset)
-	if err != nil {
-		klog.ErrorS(err, "container did not become ready", "podName", podName, "namespace", namespace, "containerName", containerName)
-		return err
-	}
-
-	// Delete the old container.
-	containerID := container.ContainerID
-	deleteCmd := exec.Command("crictl", "rm", containerID)
-	output, err := deleteCmd.CombinedOutput()
-	if err != nil {
-		klog.ErrorS(err, "failed to delete container", "containerID", containerID, "output", string(output))
-		return err
-	} else {
-		klog.InfoS("deleted container", "containerID", containerID, "output", string(output))
+		// Delete the old container.
+		deleteCmd := exec.Command("crictl", "rm", container.ID)
+		output, err := deleteCmd.CombinedOutput()
+		if err != nil {
+			klog.ErrorS(err, "failed to delete container", "containerID", container.ID, "output", string(output))
+			return err
+		} else {
+			klog.InfoS("deleted container", "containerID", container.ID, "output", string(output))
+		}
 	}
 
 	return nil
 }
 
-func createRestoredPod(restoredName string, restoredNamespace string, restoredContainerName string, restoredContainerImage string, destinationHost string) *core.Pod {
+func createRestoredPod(restoredName string, restoredNamespace string, destinationHost string) *core.Pod {
 	return &core.Pod{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      restoredName,
 			Namespace: restoredNamespace,
-		},
-		Spec: core.PodSpec{
-			Containers: []core.Container{
-				{
-					Name:            restoredContainerName,
-					Image:           restoredContainerImage,
-					ImagePullPolicy: core.PullIfNotPresent,
-				},
+			Annotations: map[string]string{
+				"kubernetes.io/hostname": destinationHost,
 			},
 		},
 	}
@@ -1103,7 +1091,7 @@ func createCheckpointImage(containers []Container) error {
 		newContainer := string(newContainerOutput)
 
 		klog.Infof("", "checkpoint path -> ", "/tmp/checkpoint/"+container.ID+".tar")
-		addCheckpointCmd := exec.Command("buildah", "add", newContainer, "/tmp/checkpoint/"+container.ID+".tar", "/")
+		addCheckpointCmd := exec.Command("sudo", "buildah", "add", newContainer, "/tmp/checkpoint/"+container.ID+".tar", "/")
 		if err := addCheckpointCmd.Run(); err != nil {
 			return fmt.Errorf("failed to add checkpoint to container: %v", err)
 		}
@@ -1118,7 +1106,7 @@ func createCheckpointImage(containers []Container) error {
 			return fmt.Errorf("failed to commit checkpoint image: %v", err)
 		}
 
-		pushCheckpointCmd := exec.Command("buildah", "push", "localhost/checkpoint-image:latest", "docker.io/leonardopoggiani/checkpoint-image:latest")
+		pushCheckpointCmd := exec.Command("buildah", "push", "localhost/checkpoint-image:latest", "leonardopoggiani/checkpoint-images:"+container.ID)
 		if err := pushCheckpointCmd.Run(); err != nil {
 			return fmt.Errorf("failed to push checkpoint image to container image registry: %v", err)
 		}
