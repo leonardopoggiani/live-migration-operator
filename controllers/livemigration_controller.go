@@ -235,6 +235,8 @@ func (r *LiveMigrationReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 	count, _, _ := r.getActualRunningPod(&childPods)
 	klog.Infof("", "number of actual running pod ", count)
 
+	var containers []Container
+
 	if annotations["snapshotPolicy"] == "live-migration" && annotations["sourcePod"] != "" {
 		// We are live-migrate a running pod here - Hot scale
 		klog.Infof("", "live-migrate a running pod")
@@ -370,7 +372,6 @@ func (r *LiveMigrationReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 	// TODO: for every container i previously checkpointed, i need to restore it.
 	// what i have to use on the checkpointImage?
 	// building image with buildah
-	containers, err := PrintContainerIDs(clientset)
 
 	err = createCheckpointImage(containers)
 	if err != nil {
@@ -1122,7 +1123,6 @@ func createCheckpointImage(containers []Container) error {
 		if err := rmContainerCmd.Run(); err != nil {
 			return fmt.Errorf("failed to remove container: %v", err)
 		}
-
 	}
 
 	return nil
