@@ -886,6 +886,14 @@ func (r *LiveMigrationReconciler) checkpointPodCrio(containerID string) error {
 		klog.InfoS("checkpointed pod", "container", containerID, "output", string(output))
 	}
 
+	givePrivilege := exec.Command("sudo", "chmod", "777", "/home/ubuntu/checkpoint/"+containerID+".tar")
+	output, err = givePrivilege.CombinedOutput()
+	if err != nil {
+		klog.ErrorS(err, "failed to give privilege", "container", containerID, "output", string(output))
+	} else {
+		klog.InfoS("gave privilege", "container", containerID, "output", string(output))
+	}
+	
 	return nil
 }
 
