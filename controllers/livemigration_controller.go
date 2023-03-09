@@ -1102,11 +1102,12 @@ func createCheckpointImage(containers []Container) error {
 		klog.Infof("", "new container name", newContainer)
 		klog.Infof("", "checkpoint path -> ", "/home/ubuntu/checkpoint/"+container.ID+".tar")
 
-		addCheckpointCmd := exec.Command("buildah", "add", "working-container", "/home/ubuntu/checkpoint/"+container.ID+".tar", "/")
+		addCheckpointCmd := exec.Command("buildah", "add", newContainer, "/home/ubuntu/checkpoint/"+container.ID+".tar", "/")
 		if err = addCheckpointCmd.Run(); err != nil {
 			return fmt.Errorf("failed to add checkpoint to container: %v", err)
 		}
 
+		klog.Infof("", "checkpoint added to container", container.Name)
 		configCheckpointCmd := exec.Command("buildah", "config", "--annotation=io.kubernetes.cri-o.annotations.checkpoint.name="+container.Name, newContainer)
 		if err = configCheckpointCmd.Run(); err != nil {
 			return fmt.Errorf("failed to configure checkpoint annotation: %v", err)
