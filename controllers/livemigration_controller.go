@@ -1145,7 +1145,6 @@ func createCheckpointImage(containers []Container) error {
 }
 
 func buildahCheckpointImage(containers []Container) error {
-
 	buildStoreOptions, err := storage.DefaultStoreOptionsAutoDetectUID()
 	if err != nil {
 		return fmt.Errorf("failed to get default store options: %v", err)
@@ -1178,24 +1177,27 @@ func buildahCheckpointImage(containers []Container) error {
 	defer builder.Delete()
 
 	for _, container := range containers {
-		err = builder.Add(container.ID, false, buildah.AddAndCopyOptions{}, "/home/ubuntu/checkpoint/"+container.ID+".tar")
+		containerID := container.ID
+
+		// Copy the checkpoint file to the root directory of the container
+		err = builder.Add(containerID, false, buildah.AddAndCopyOptions{}, "/home/ubuntu/checkpoint/"+containerID+".tar", "/")
 		if err != nil {
 			panic(err)
 		}
 
-		imageRef, err := is.Transport.ParseStoreReference(buildStore, "docker.io/leonardopoggiani/checkpoint-images:"+container.ID)
+		imageRef, err := is.Transport.ParseStoreReference(buildStore, "docker.io/leonardopoggiani/checkpoint-images:"+containerID)
 		if err != nil {
 			panic(err)
 		}
 
-		imageId, _, _, err := builder.Commit(context.TODO(), imageRef, buildah.CommitOptions{})
+		imageID, _, _, err := builder.Commit(context.TODO(), imageRef, buildah.CommitOptions{})
 		if err != nil {
 			panic(err)
 		}
-		fmt.Printf("Image built! %s\n", imageId)
+		fmt.Printf("Image built! %s\n", imageID)
 
+		fmt.Printf("Image pushed! %s\n", container.ID)
 	}
 
 	return nil
-
 }

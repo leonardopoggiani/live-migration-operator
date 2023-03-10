@@ -1,7 +1,7 @@
 name: Deploy Kubernetes Clusters
 
 on:
-  push:
+  pull_request:
     branches:
       - main
 
