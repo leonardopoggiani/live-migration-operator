@@ -2,6 +2,8 @@ package main
 
 import (
 	"flag"
+	"github.com/containers/buildah"
+	"github.com/containers/storage/pkg/unshare"
 	livemigrationv1 "github.com/leonardopoggiani/live-migration-operator/api/v1alpha1"
 	"github.com/leonardopoggiani/live-migration-operator/controllers"
 	"k8s.io/klog/v2"
@@ -34,6 +36,11 @@ func main() {
 		"Enable leader election for controller manager. "+
 			"Enabling this will ensure there is only one active controller manager.")
 	flag.Parse()
+
+	if buildah.InitReexec() {
+		return
+	}
+	unshare.MaybeReexecUsingUserNamespace(false)
 
 	ctrl.SetLogger(zap.New(zap.UseDevMode(true)))
 

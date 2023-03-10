@@ -24,6 +24,10 @@ import (
 	"github.com/containerd/containerd/api/services/tasks/v1"
 	"github.com/containerd/containerd/cio"
 	"github.com/containerd/containerd/namespaces"
+	"github.com/containers/buildah"
+	"github.com/containers/common/pkg/config"
+	is "github.com/containers/image/v5/storage"
+	"github.com/containers/storage"
 	api "github.com/leonardopoggiani/live-migration-operator/api/v1alpha1"
 	appsv1 "k8s.io/api/apps/v1"
 	core "k8s.io/api/core/v1"
@@ -377,7 +381,8 @@ func (r *LiveMigrationReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 		klog.Infof("", "container ->", container)
 	}
 
-	err = createCheckpointImage(containers)
+	// err = createCheckpointImage(containers)
+	err = buildahCheckpointImage(containers)
 	if err != nil {
 		klog.ErrorS(err, "unable to create checkpoint image", "pod", migratingPod.Name)
 	} else {
@@ -1137,4 +1142,60 @@ func createCheckpointImage(containers []Container) error {
 	}
 
 	return nil
+}
+
+func buildahCheckpointImage(containers []Container) error {
+
+	buildStoreOptions, err := storage.DefaultStoreOptionsAutoDetectUID()
+	if err != nil {
+		return fmt.Errorf("failed to get default store options: %v", err)
+	}
+
+	conf, err := config.Default()
+	if err != nil {
+		panic(err)
+	}
+	capabilitiesForRoot, err := conf.Capabilities("root", nil, nil)
+	if err != nil {
+		panic(err)
+	}
+
+	buildStore, err := storage.GetStore(buildStoreOptions)
+	if err != nil {
+		return fmt.Errorf("failed to get store: %v", err)
+	}
+	defer buildStore.Shutdown(false)
+
+	builderOpts := buildah.BuilderOptions{
+		FromImage:    "scratch", // base image
+		Capabilities: capabilitiesForRoot,
+	}
+
+	builder, err := buildah.NewBuilder(context.TODO(), buildStore, builderOpts)
+	if err != nil {
+		return fmt.Errorf("failed to create builder: %v", err)
+	}
+	defer builder.Delete()
+
+	for _, container := range containers {
+		err = builder.Add(container.ID, false, buildah.AddAndCopyOptions{}, "/home/ubuntu/checkpoint/"+container.ID+".tar")
+		if err != nil {
+			panic(err)
+		}
+
+		imageRef, err := is.Transport.ParseStoreReference(buildStore, "docker.io/leonardopoggiani/checkpoint-images:"+container.ID)
+		if err != nil {
+			panic(err)
+		}
+
+		imageId, _, _, err := builder.Commit(context.TODO(), imageRef, buildah.CommitOptions{})
+		if err != nil {
+			panic(err)
+		}
+		fmt.Printf("Image built! %s\n", imageId)
+
+	}
+
+	return nil
+
 }
