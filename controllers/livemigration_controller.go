@@ -382,7 +382,7 @@ func (r *LiveMigrationReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 	}
 
 	// err = createCheckpointImage(containers)
-	err = buildahCheckpointImage(containers)
+	err = buildahCheckpointImage(ctx, containers)
 	if err != nil {
 		klog.ErrorS(err, "unable to create checkpoint image", "pod", migratingPod.Name)
 	} else {
@@ -1146,7 +1146,7 @@ func createCheckpointImage(containers []Container) error {
 	return nil
 }
 
-func buildahCheckpointImage(containers []Container) error {
+func buildahCheckpointImage(ctx context.Context, containers []Container) error {
 	buildStoreOptions, err := storage.DefaultStoreOptionsAutoDetectUID()
 	if err != nil {
 		return fmt.Errorf("failed to get default store options: %v", err)
@@ -1190,13 +1190,11 @@ func buildahCheckpointImage(containers []Container) error {
 			panic(err)
 		}
 
-		imageID, _, _, err := builder.Commit(context.TODO(), imageRef, buildah.CommitOptions{})
+		imageID, _, _, err := builder.Commit(ctx, imageRef, buildah.CommitOptions{})
 		if err != nil {
 			panic(err)
 		}
 		fmt.Printf("Image built! %s\n", imageID)
-
-		fmt.Printf("Image pushed! %s\n", container.ID)
 	}
 
 	return nil
