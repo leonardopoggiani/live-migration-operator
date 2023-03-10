@@ -1167,27 +1167,25 @@ func buildahCheckpointImage(containers []Container) error {
 	}
 	defer buildStore.Shutdown(false)
 
-	builderOpts := buildah.BuilderOptions{
-		FromImage:    "scratch", // base image
-		Capabilities: capabilitiesForRoot,
-	}
-
-	builder, err := buildah.NewBuilder(context.TODO(), buildStore, builderOpts)
-	if err != nil {
-		return fmt.Errorf("failed to create builder: %v", err)
-	}
-	defer builder.Delete()
-
 	for _, container := range containers {
-		containerID := container.ID
+		builderOpts := buildah.BuilderOptions{
+			FromImage:    "scratch", // base image
+			Capabilities: capabilitiesForRoot,
+		}
+
+		builder, err := buildah.NewBuilder(context.TODO(), buildStore, builderOpts)
+		if err != nil {
+			return fmt.Errorf("failed to create builder: %v", err)
+		}
+		defer builder.Delete()
 
 		// Copy the checkpoint file to the root directory of the container
-		err = builder.Add(containerID, false, buildah.AddAndCopyOptions{}, "/home/ubuntu/checkpoint/"+containerID+".tar", "/")
+		err = builder.Add(builder.Container, false, buildah.AddAndCopyOptions{}, "/home/ubuntu/checkpoint/"+container.ID+".tar")
 		if err != nil {
 			panic(err)
 		}
 
-		imageRef, err := is.Transport.ParseStoreReference(buildStore, "docker.io/leonardopoggiani/checkpoint-images:"+containerID)
+		imageRef, err := is.Transport.ParseStoreReference(buildStore, "docker.io/leonardopoggiani/checkpoint-images:"+container.ID)
 		if err != nil {
 			panic(err)
 		}
