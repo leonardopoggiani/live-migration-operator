@@ -638,15 +638,13 @@ func (r *LiveMigrationReconciler) checkpointPodCrio(containerID string) error {
 		klog.InfoS("checkpointed pod", "container", containerID, "output", string(output))
 	}
 
-	/*
-		givePrivilege := exec.Command("sudo", "chmod", "777", "/home/node/checkpoint/"+containerID+".tar")
-		output, err = givePrivilege.CombinedOutput()
-		if err != nil {
-			klog.ErrorS(err, "failed to give privilege", "container", containerID, "output", string(output))
-		} else {
-			klog.InfoS("gave privilege", "container", containerID, "output", string(output))
-		}
-	*/
+	givePrivilege := exec.Command("/bin/sh", "-c", "sudo chmod 777 /home/node/checkpoint/"+containerID+".tar")
+	output, err = givePrivilege.CombinedOutput()
+	if err != nil {
+		klog.ErrorS(err, "failed to give privilege", "container", containerID, "output", string(output))
+	} else {
+		klog.InfoS("gave privilege", "container", containerID, "output", string(output))
+	}
 
 	return nil
 }
@@ -722,7 +720,7 @@ func (r *LiveMigrationReconciler) restorePodCrio(podName string, namespace strin
 		}
 
 		// Delete the old container.
-		deleteCmd := exec.Command("crictl", "rm", container.ID)
+		deleteCmd := exec.Command("/bin/sh", "-c", "sudo crictl rm "+container.ID)
 		output, err := deleteCmd.CombinedOutput()
 		if err != nil {
 			klog.ErrorS(err, "failed to delete container", "containerID", container.ID, "output", string(output))
