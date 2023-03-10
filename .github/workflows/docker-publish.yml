@@ -45,9 +45,7 @@ jobs:
         uses: docker/build-push-action@v4
         with:
           context: .
-          platforms: linux/amd64,linux/arm64
+          platforms: linux/amd64
           push: true
           tags: |
             ghcr.io/leonardopoggiani/live-migration-operator:latest
-          cache-from: type=gha
-          cache-to: type=gha,mode=max

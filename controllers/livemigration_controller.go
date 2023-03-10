@@ -779,13 +779,13 @@ func (r *LiveMigrationReconciler) waitForContainerReady(podName string, namespac
 
 func (r *LiveMigrationReconciler) terminateCheckpointedPod(ctx context.Context, podName string, clientset *kubernetes.Clientset) error {
 	// get the pod by name
-	klog.Infof("", "Terminating pod", podName)
+	klog.Infof("", "Terminating pod ", podName)
 
 	pod, err := clientset.CoreV1().Pods("liqo-demo").Get(context.Background(), podName, metav1.GetOptions{})
 	if err != nil {
-		klog.ErrorS(err, "unable to get pod", pod.Name)
+		klog.ErrorS(err, "unable to get pod ", pod.Name)
 	} else {
-		klog.Info("", "pod", podName)
+		klog.Info("pod ", podName)
 	}
 
 	// delete the pod
@@ -793,17 +793,17 @@ func (r *LiveMigrationReconciler) terminateCheckpointedPod(ctx context.Context, 
 	if err != nil {
 		klog.ErrorS(err, "unable to delete pod", pod.Name)
 	} else {
-		klog.Info("pod deleted", podName)
+		klog.Info("pod deleted ", podName)
 	}
 
 	err = waitForPodDeletion(ctx, podName, clientset)
 	if err != nil {
 		klog.ErrorS(err, "unable to finish delete pod", "pod", pod.Name)
 	} else {
-		klog.Info("pod deletetion completed", podName)
+		klog.Info("pod deletetion completed ", podName)
 	}
 
-	klog.Infof("", "Pod terminated", podName)
+	klog.Infof("Pod terminated ", podName)
 	return nil
 }
 
@@ -820,8 +820,6 @@ func waitForPodDeletion(ctx context.Context, podName string, clientset *kubernet
 	w, err := clientset.CoreV1().Pods("liqo-demo").Watch(ctx, opts)
 	if err != nil {
 		klog.ErrorS(err, "unable to watch pod", "pod", podName)
-	} else {
-		klog.Info("watcher", w)
 	}
 	defer w.Stop()
 
