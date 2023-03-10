@@ -626,10 +626,9 @@ func (r *LiveMigrationReconciler) updateAnnotations(ctx context.Context, pod *co
 }
 
 func (r *LiveMigrationReconciler) checkpointPodCrio(containerID string) error {
+
 	// Construct the cri-o checkpoint command.
-	checkpointCmd := exec.Command("crictl", "checkpoint")
-	checkpointCmd.Args = append(checkpointCmd.Args, "--export=/home/ubuntu/live-migration-operator/checkpoint/"+containerID+".tar")
-	checkpointCmd.Args = append(checkpointCmd.Args, containerID)
+	checkpointCmd := exec.Command("/bin/sh", "-c", "sudo crictl checkpoint --export=/home/ubuntu/live-migration-operator/checkpoint/"+containerID+".tar "+containerID)
 
 	// Execute the checkpoint command.
 	output, err := checkpointCmd.CombinedOutput()
@@ -647,8 +646,8 @@ func (r *LiveMigrationReconciler) checkpointPodCrio(containerID string) error {
 		} else {
 			klog.InfoS("gave privilege", "container", containerID, "output", string(output))
 		}
-
 	*/
+
 	return nil
 }
 
@@ -846,8 +845,6 @@ func waitForPodDeletion(ctx context.Context, podName string, clientset *kubernet
 func createCheckpointImage(containers []Container) error {
 
 	for _, container := range containers {
-
-		// cmd := exec.Command("/bin/sh", "-c", "sudo find ...")
 
 		newContainerCmd := exec.Command("/bin/sh", "-c", "sudo buildah from scratch")
 		// newContainerCmd := exec.Command("sudo", "buildah", "from", "scratch")
