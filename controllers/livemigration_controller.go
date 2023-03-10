@@ -19,16 +19,6 @@ package controllers
 import (
 	"context"
 	"fmt"
-	"github.com/checkpoint-restore/go-criu"
-	"github.com/containerd/containerd"
-	"github.com/containerd/containerd/api/services/tasks/v1"
-	"github.com/containerd/containerd/cio"
-	"github.com/containerd/containerd/namespaces"
-	"github.com/containers/buildah"
-	"github.com/containers/buildah/pkg/parse"
-	"github.com/containers/common/pkg/config"
-	is "github.com/containers/image/v5/storage"
-	"github.com/containers/storage"
 	api "github.com/leonardopoggiani/live-migration-operator/api/v1alpha1"
 	appsv1 "k8s.io/api/apps/v1"
 	core "k8s.io/api/core/v1"
@@ -64,13 +54,13 @@ func (r *LiveMigrationReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 	klog.Infof("Reconciling LiveMigration %s", req.Name)
 
 	// Load Kubernetes config
-	config, err := clientcmd.BuildConfigFromFlags("", "/home/ubuntu/.kube/config")
+	kubeconfig, err := clientcmd.BuildConfigFromFlags("", "/home/ubuntu/.kube/config")
 	if err != nil {
 		klog.ErrorS(err, "failed to load Kubernetes config")
 	}
 
 	// Create Kubernetes API client
-	clientset, err := kubernetes.NewForConfig(config)
+	clientset, err := kubernetes.NewForConfig(kubeconfig)
 	if err != nil {
 		klog.ErrorS(err, "failed to create Kubernetes client")
 	}
@@ -220,13 +210,13 @@ func (r *LiveMigrationReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 	}
 
 	pod, err := r.desiredPod(migratingPod, &migratingPod, req.Namespace, template)
-	klog.Infof("", "pod: ", pod)
+	klog.Infof("", "pod: ", pod.Name)
 	if err != nil {
 		return ctrl.Result{}, err
 	}
 
 	depl, err := r.desiredDeployment(migratingPod, &migratingPod, req.Namespace, template)
-	klog.Infof("", "depl: ", depl)
+	klog.Infof("", "depl: ", depl.Name)
 
 	if err != nil {
 		return ctrl.Result{}, err
@@ -234,7 +224,6 @@ func (r *LiveMigrationReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 
 	klog.Infof("", "annotations ", annotations["snapshotPath"])
 	klog.Infof("", "number of existing pod ", len(childPods.Items))
-	klog.Infof("", "desired pod ", pod)
 	klog.Infof("", "number of desired pod ", migratingPod.Spec.Replicas)
 
 	count, _, _ := r.getActualRunningPod(&childPods)
@@ -259,7 +248,6 @@ func (r *LiveMigrationReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 
 		*/
 		klog.Infof("", "Live-migration", "Step 1 - Check source pod is exist or not - completed")
-		klog.Infof("", "sourcePod ok ", sourcePod)
 		klog.Infof("", "sourcePod status ", sourcePod.Status.Phase)
 		// Step2: checkpoint sourcePod
 		// copySourcePod := sourcePod.DeepCopy()
@@ -283,8 +271,6 @@ func (r *LiveMigrationReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 		}
 
 		for _, container := range containers {
-			klog.Infof("", "container ->", container)
-
 			// TODO: Check if the container is running.
 
 			// Checkpoint the container.
@@ -364,8 +350,6 @@ func (r *LiveMigrationReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 
 	// func (r *LiveMigrationReconciler) restorePodCrio(podName string, namespace string, containerName string, checkpointImage string, clientset *kubernetes.Clientset)
 
-	klog.Infof("Migrating pod: %s", migratingPod)
-
 	// first I need to terminate the checkpointed pod
 	err = r.terminateCheckpointedPod(ctx, migratingPod.Name, clientset)
 	if err != nil {
@@ -378,13 +362,12 @@ func (r *LiveMigrationReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 	// what i have to use on the checkpointImage?
 	// building image with buildah
 
-	for _, container := range containers {
-		klog.Infof("", "container ->", container)
-		tryBuildah(ctx, container)
-	}
+	// for _, container := range containers {
+	//	tryBuildah(ctx, container)
+	//}
 
-	// err = createCheckpointImage(containers)
-	err = buildahCheckpointImage(ctx, containers)
+	err = createCheckpointImage(containers)
+	// err = buildahCheckpointImage(ctx, containers)
 	if err != nil {
 		klog.ErrorS(err, "unable to create checkpoint image", "pod", migratingPod.Name)
 	} else {
@@ -502,14 +485,14 @@ func (r *LiveMigrationReconciler) getActualRunningPod(childPods *corev1.PodList)
 	return count, actualRunningPod, isDeletingPod
 }
 
-func (r *LiveMigrationReconciler) createMultiPod(ctx context.Context, replicas int, depl *appsv1.Deployment) error {
+func (r *LiveMigrationReconciler) createMultiPod(ctx context.Context, depl *appsv1.Deployment) error {
 	if err := r.Create(ctx, depl); err != nil {
 		return err
 	}
 	return nil
 }
 
-func (r *LiveMigrationReconciler) updateMultiPod(ctx context.Context, replicas int, depl *appsv1.Deployment) error {
+func (r *LiveMigrationReconciler) updateMultiPod(ctx context.Context, depl *appsv1.Deployment) error {
 	if err := r.Update(ctx, depl); err != nil {
 		return err
 	}
@@ -642,247 +625,10 @@ func (r *LiveMigrationReconciler) updateAnnotations(ctx context.Context, pod *co
 	return nil
 }
 
-func (r *LiveMigrationReconciler) checkpointPodContainerd(ctx context.Context, pod *corev1.Pod, snapshotPath string) error {
-
-	cr := criu.MakeCriu()
-	err := cr.Prepare()
-	if err != nil {
-		return err
-	} else {
-		klog.Infof("checkpointPodCriu", "pod", pod.Name, "snapshotPath", snapshotPath)
-	}
-
-	// ******* CONTAINERD ******* //
-
-	cntrd, err := containerd.New("/run/containerd/containerd.sock")
-	if err != nil {
-		klog.Errorf("ERR: %s", err)
-	}
-	klog.Infof("opened containerd client", "client", cntrd)
-
-	defer func(cntrd *containerd.Client) {
-		err := cntrd.Close()
-		if err != nil {
-
-		}
-	}(cntrd)
-
-	// create a context for docker
-	ctx = context.Background()
-	ctx = namespaces.WithNamespace(ctx, "liqo-demo")
-
-	klog.Infof("created namespace", "namespace", ctx)
-
-	// list all running containers in the liqo-demo namespace, need to checkpoint all of them
-	containers, err := cntrd.ContainerService().List(ctx)
-	if err != nil {
-		klog.Errorf("ERR: %s", err)
-	} else {
-		klog.Infof("containers", "containers", containers)
-	}
-
-	for cntr := range containers {
-		klog.Infof("container", "container", cntr)
-
-		container, err := cntrd.LoadContainer(ctx, string(rune(cntr)))
-		if err != nil {
-			return err
-		} else {
-			klog.Infof("loaded container", "container", container)
-		}
-	}
-
-	container, err := cntrd.LoadContainer(ctx, "redis")
-	if err != nil {
-		return err
-	} else {
-		klog.Infof("loaded container", "container", container)
-	}
-
-	/* pulling an image from a registry, REMOTE method
-	// pull an image and unpack it into the configured snapshotter
-	image, err := cntrd.Pull(ctx, "docker.io/library/redis:latest", containerd.WithPullUnpack)
-	if err != nil {
-		klog.Errorf("ERR: %s", err)
-	}
-	klog.Infof("pulled image", "image", image)
-	*/
-
-	snapshotter := containerd.DefaultSnapshotter
-	snapshotterService := cntrd.SnapshotService(snapshotter)
-	if err != nil {
-		return err
-	}
-	if err := snapshotterService.Remove(ctx, "redis-rootfs"); err != nil {
-		klog.ErrorS(err, "failed to remove snapshot", "snapshot", "redis-rootfs")
-	} else {
-		klog.Infof("removed snapshot", "snapshot", "redis-rootfs")
-	}
-
-	// Get a list of all tasks running in the system
-	taskService := cntrd.TaskService()
-	tasksList, err := cntrd.TaskService().List(ctx, &tasks.ListTasksRequest{})
-
-	// Iterate through the tasks and stop and delete any tasks with the name "redis"
-	for _, t := range tasksList.Tasks {
-		taskPid := t.Pid
-		taskID := t.ID
-		taskContainerID := t.ContainerID
-		klog.Infof("task", "pid", taskPid, "id", taskID, "containerID", taskContainerID)
-
-		request := tasks.DeleteTaskRequest{
-			ContainerID: taskContainerID,
-		}
-
-		response, err := taskService.Delete(ctx, &request)
-		if err != nil {
-			klog.ErrorS(err, "failed to delete task", "task", "redis")
-		} else {
-			klog.Infof("deleted task", "task", response)
-		}
-	}
-
-	err = cntrd.ContainerService().Delete(ctx, "redis")
-	if err != nil {
-		klog.ErrorS(err, "failed to delete container", "container", "redis")
-	} else {
-		klog.Infof("deleted container", "container", "redis")
-	}
-
-	// allocate a new RW root filesystem for a container based on the image
-	/* if using a running container there is no need to create a new one
-	redis, err := cntrd.NewContainer(ctx, "redis",
-		containerd.WithNewSnapshot("redis-rootfs", image),
-		containerd.WithNewSpec(oci.WithImageConfig(image)),
-	)
-	if err != nil {
-		klog.Errorf("ERR %s", err)
-	}
-
-	*/
-
-	task, err := container.NewTask(ctx, cio.NewCreator(cio.WithStdio))
-	if err != nil {
-		klog.Errorf("ERR %s", err)
-	} else {
-		klog.Infof("created task", "task", task)
-	}
-
-	// the task is now running and has a pid that can be used to setup networking
-	// or other runtime settings outside containerd
-	pid := task.Pid()
-	klog.Infof("redis is running as pid %d", pid)
-
-	// start the redis-server process inside the container
-	err = task.Start(ctx)
-	if err != nil {
-		klog.ErrorS(err, "start task")
-	}
-
-	// wait for the task to exit and get the exit status
-	status, err := task.Wait(ctx)
-	if err != nil {
-		klog.ErrorS(err, "ERR")
-	} else {
-		klog.Infof("task status", "status", status)
-	}
-
-	// checkpoint the task then push it to a registry
-	checkpoint, err := task.Checkpoint(ctx)
-	if err != nil {
-		klog.ErrorS(err, "checkpoint error")
-	} else {
-		klog.Infof("checkpointed task", "checkpoint", checkpoint)
-	}
-
-	// push the image to the registry using the descriptor
-	/*
-		err = cntrd.Push(ctx, "docker.io/leonardopoggiani/redis", checkpoint.Target())
-		if err != nil {
-			klog.Errorf("ERR %s", err)
-		} else {
-			klog.Infof("pushed image", "image", image)
-		}
-	*/
-
-	// on a new machine pull the checkpoint and restore the redis container
-	/*
-		checkpoint, err = cntrd.Pull(ctx, "myregistry/checkpoints/redis:master")
-
-		nginx, err = cntrd.NewContainer(ctx, "redis-master", containerd.WithNewSnapshot("redis-rootfs", checkpoint))
-		defer func(nginx containerd.Container, ctx context.Context, opts ...containerd.DeleteOpts) {
-			err := nginx.Delete(ctx, opts...)
-			if err != nil {
-
-			}
-		}(nginx, ctx)
-
-		task, err = nginx.NewTask(ctx, cio.NewCreator(cio.WithStdio), containerd.WithTaskCheckpoint(checkpoint))
-		defer func(task containerd.Task, ctx context.Context, opts ...containerd.ProcessDeleteOpts) {
-			_, err := task.Delete(ctx, opts...)
-			if err != nil {
-
-			}
-		}(task, ctx)
-
-		err = task.Start(ctx)
-
-	*/
-
-	/*
-
-		checkpointOpts := criu.CheckpointOpts{
-			TrackMem:     true,
-			LeaveRunning: true,
-		}
-		snapshotPolicy := "checkpoint"
-		if snapshotPath == "" {
-			snapshotPath = "/var/lib/kubelet/migration/kkk"
-		}
-		if err := r.updateAnnotations(ctx, pod, snapshotPolicy, snapshotPath); err != nil {
-			return err
-		}
-		// Get the containerd client
-		client, err := containerd.New("/run/containerd/containerd.sock")
-		if err != nil {
-			return err
-		}
-		defer client.Close()
-
-		// Get the container and task for the pod
-		container, err := client.LoadContainer(ctx, pod.Name)
-		if err != nil {
-			return err
-		}
-		defer container.Delete(ctx)
-
-		task, err := container.Task(ctx, nil)
-		if err != nil {
-			return err
-		}
-		defer task.Delete(ctx)
-
-		// Checkpoint the task with custom options
-		checkpoint, err := task.CheckpointWithOptions(ctx, checkpointOpts)
-		if err != nil {
-			return err
-		}
-
-		// Push the checkpoint to a registry
-		err = client.Push(ctx, "myregistry/checkpoints/"+pod.Name+":latest", checkpoint)
-		if err != nil {
-			return err
-		}
-
-	*/
-
-	return nil
-}
-
 func (r *LiveMigrationReconciler) checkpointPodCrio(containerID string) error {
 	// Construct the cri-o checkpoint command.
 	checkpointCmd := exec.Command("crictl", "checkpoint")
-	checkpointCmd.Args = append(checkpointCmd.Args, "--export=/home/ubuntu/checkpoint/"+containerID+".tar")
+	checkpointCmd.Args = append(checkpointCmd.Args, "--export=/home/ubuntu/live-migration-operator/checkpoint/"+containerID+".tar")
 	checkpointCmd.Args = append(checkpointCmd.Args, containerID)
 
 	// Execute the checkpoint command.
@@ -894,7 +640,7 @@ func (r *LiveMigrationReconciler) checkpointPodCrio(containerID string) error {
 	}
 
 	/*
-		givePrivilege := exec.Command("sudo", "chmod", "777", "/home/ubuntu/checkpoint/"+containerID+".tar")
+		givePrivilege := exec.Command("sudo", "chmod", "777", "/home/node/checkpoint/"+containerID+".tar")
 		output, err = givePrivilege.CombinedOutput()
 		if err != nil {
 			klog.ErrorS(err, "failed to give privilege", "container", containerID, "output", string(output))
@@ -961,7 +707,7 @@ func (r *LiveMigrationReconciler) restorePodCrio(podName string, namespace strin
 		}
 		restoredPod.Spec.Containers = append(restoredPod.Spec.Containers, newContainer)
 
-		klog.Infof("restored pod %s", restoredPod)
+		klog.Infof("restored pod %s", restoredPod.Spec.Containers[0].Image)
 		// Update the pod
 		_, err = podClient.Create(context.Background(), restoredPod, metav1.CreateOptions{})
 		if err != nil {
@@ -1040,7 +786,7 @@ func (r *LiveMigrationReconciler) terminateCheckpointedPod(ctx context.Context, 
 	if err != nil {
 		klog.ErrorS(err, "unable to get pod", pod.Name)
 	} else {
-		klog.Info("pod", podName)
+		klog.Info("", "pod", podName)
 	}
 
 	// delete the pod
@@ -1101,7 +847,10 @@ func createCheckpointImage(containers []Container) error {
 
 	for _, container := range containers {
 
-		newContainerCmd := exec.Command("buildah", "from", "scratch")
+		// cmd := exec.Command("/bin/sh", "-c", "sudo find ...")
+
+		newContainerCmd := exec.Command("/bin/sh", "-c", "sudo buildah from scratch")
+		// newContainerCmd := exec.Command("sudo", "buildah", "from", "scratch")
 		newContainerOutput, err := newContainerCmd.Output()
 		if err != nil {
 			return fmt.Errorf("failed to create new container: %v", err)
@@ -1109,37 +858,38 @@ func createCheckpointImage(containers []Container) error {
 		newContainer := string(newContainerOutput)
 
 		klog.Infof("", "new container name", newContainer)
-		klog.Infof("", "checkpoint path -> ", "/home/ubuntu/checkpoint/"+container.ID+".tar")
+		klog.Infof("", "checkpoint path -> ", "/home/ubuntu/live-migration-operator/checkpoint/"+container.ID+".tar")
 
-		klog.Infof("", "buildah", "add", newContainer, "/home/ubuntu/checkpoint/"+container.ID+".tar", "/")
-		addCheckpointCmd := exec.Command("buildah", "add", newContainer, "/home/ubuntu/checkpoint/"+container.ID+".tar", "/")
-
+		addCheckpointCmd := exec.Command("/bin/sh", "-c", "sudo buildah add "+newContainer+" /home/ubuntu/live-migration-operator/checkpoint/"+container.ID+".tar /")
+		// addCheckpointCmd := exec.Command("sudo", "buildah", "add", newContainer, "/home/ubuntu/live-migration-operator/checkpoint/"+container.ID+".tar")
 		err = addCheckpointCmd.Run()
 		if err != nil {
 			return fmt.Errorf("failed to add checkpoint to container: %v", err)
 		}
 
 		klog.Infof("", "checkpoint added to container", container.Name)
-		configCheckpointCmd := exec.Command("buildah", "config", "--annotation=io.kubernetes.cri-o.annotations.checkpoint.name="+container.Name, newContainer)
-
+		configCheckpointCmd := exec.Command("/bin/sh", "-c", "sudo buildah config --annotation=io.kubernetes.cri-o.annotations.checkpoint.name="+container.Name+" "+newContainer)
+		// configCheckpointCmd := exec.Command("sudo", "buildah", "config", "--annotation=io.kubernetes.cri-o.annotations.checkpoint.name="+container.Name, newContainer)
 		err = configCheckpointCmd.Run()
 		if err != nil {
 			return fmt.Errorf("failed to configure checkpoint annotation: %v", err)
 		}
 
-		commitCheckpointCmd := exec.Command("buildah", "commit", newContainer, "localhost/checkpoint-image:latest")
-
+		commitCheckpointCmd := exec.Command("/bin/sh", "-c", "sudo buildah commit "+newContainer+" localhost/checkpoint-image:"+container.ID)
+		// commitCheckpointCmd := exec.Command("sudo", "buildah", "commit", newContainer, "localhost/checkpoint-image:"+container.ID)
 		err = commitCheckpointCmd.Run()
 		if err != nil {
 			return fmt.Errorf("failed to commit checkpoint image: %v", err)
 		}
 
-		pushCheckpointCmd := exec.Command("buildah", "push", "localhost/checkpoint-image:latest", "leonardopoggiani/checkpoint-images:"+container.ID)
+		pushCheckpointCmd := exec.Command("/bin/sh", "-c", "sudo buildah push localhost/checkpoint-image:"+container.ID+" leonardopoggiani/checkpoint-images:"+container.ID)
+		// pushCheckpointCmd := exec.Command("sudo", "buildah", "push", "localhost/checkpoint-image:"+container.ID, "leonardopoggiani/checkpoint-images:"+container.ID)
 		if err = pushCheckpointCmd.Run(); err != nil {
 			return fmt.Errorf("failed to push checkpoint image to container image registry: %v", err)
 		}
 
-		rmContainerCmd := exec.Command("buildah", "rm", newContainer)
+		rmContainerCmd := exec.Command("/bin/sh", "-c", "sudo buildah rm "+container.ID)
+		// rmContainerCmd := exec.Command("sudo", "buildah", "rm", newContainer)
 		if err = rmContainerCmd.Run(); err != nil {
 			return fmt.Errorf("failed to remove container: %v", err)
 		}
@@ -1148,6 +898,7 @@ func createCheckpointImage(containers []Container) error {
 	return nil
 }
 
+/*
 func buildahCheckpointImage(ctx context.Context, containers []Container) error {
 	buildStoreOptions, err := storage.DefaultStoreOptionsAutoDetectUID()
 	if err != nil {
@@ -1175,14 +926,14 @@ func buildahCheckpointImage(ctx context.Context, containers []Container) error {
 			Capabilities: capabilitiesForRoot,
 		}
 
-		builder, err := buildah.NewBuilder(context.TODO(), buildStore, builderOpts)
+		builder, err := buildah.NewBuilder(ctx, buildStore, builderOpts)
 		if err != nil {
 			return fmt.Errorf("failed to create builder: %v", err)
 		}
 		defer builder.Delete()
 
 		// Copy the checkpoint file to the root directory of the container
-		err = builder.Add(builder.Container, false, buildah.AddAndCopyOptions{}, "/home/ubuntu/checkpoint/"+container.ID+".tar")
+		err = builder.Add(builder.Container, false, buildah.AddAndCopyOptions{}, "/home/ubuntu/live-migration/checkpoint/"+container.ID+".tar")
 		if err != nil {
 			panic(err)
 		}
@@ -1231,10 +982,17 @@ func tryBuildah(ctx context.Context, container Container) error {
 	builder, err := buildah.NewBuilder(ctx, buildStore, builderOpts)
 	if err != nil {
 		panic(err)
+	} else {
+		klog.Infof("", "builder created", builder.ContainerID)
 	}
 	defer builder.Delete()
 
-	err = builder.Add("/home/node/checkpoint", false, buildah.AddAndCopyOptions{}, container.ID+".tar")
+	err = builder.Add(builder.ContainerID, false, buildah.AddAndCopyOptions{}, "checkpoint/"+container.ID+".tar")
+	if err != nil {
+		panic(err)
+	}
+
+	imageRef, err := is.Transport.ParseStoreReference(buildStore, "docker.io/leonardopoggiani/checkpoint-images:"+container.ID)
 	if err != nil {
 		panic(err)
 	}
@@ -1244,24 +1002,19 @@ func tryBuildah(ctx context.Context, container Container) error {
 		panic(err)
 	}
 
-	err = builder.Run([]string{"sh", "-c", "date > /home/node/build-date.txt"}, buildah.RunOptions{Isolation: isolation, Terminal: buildah.WithoutTerminal})
+	err = builder.Run([]string{"ls"}, buildah.RunOptions{Isolation: isolation, Terminal: buildah.WithoutTerminal})
 	if err != nil {
 		panic(err)
 	}
 
-	builder.SetCmd([]string{"node", "/home/node/script.js"})
-
-	imageRef, err := is.Transport.ParseStoreReference(buildStore, "docker.io/myusername/my-image")
+	imageId, _, _, err := builder.Commit(ctx, imageRef, buildah.CommitOptions{})
 	if err != nil {
 		panic(err)
 	}
 
-	imageId, _, _, err := builder.Commit(context.TODO(), imageRef, buildah.CommitOptions{})
-	if err != nil {
-		panic(err)
-	}
-
-	fmt.Printf("Image built! %s\n", imageId)
+	fmt.Printf("Try image built! %s\n", imageId)
 
 	return nil
 }
+
+*/

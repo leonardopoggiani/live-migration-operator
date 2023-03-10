@@ -36,7 +36,9 @@ jobs:
       - 
         name: Build Go packages
         run: |
-          go build -o live-migration-operator .
+           sudo apt-get update
+           sudo apt-get install -y libbtrfs-dev libdevmapper-dev
+           go build -o live-migration-operator .
 
       -
         name: Build and push

@@ -20,6 +20,7 @@ jobs:
     - name: Install Linters
       run: |
         sudo apt update
+        sudo apt install -y libbtrfs-dev libgpgme-dev libdevmapper-dev
         go install honnef.co/go/tools/cmd/staticcheck@2023.1.2
 
     - name: Run Linters

@@ -26,3 +26,6 @@ build
 deployments
 hack
 *.txt
+
+checkpoint
+checkpoint/*
