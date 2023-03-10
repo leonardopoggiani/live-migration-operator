@@ -380,9 +380,8 @@ func (r *LiveMigrationReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 
 	for _, container := range containers {
 		klog.Infof("", "container ->", container)
+		tryBuildah(ctx, container)
 	}
-
-	tryBuildah(ctx)
 
 	// err = createCheckpointImage(containers)
 	err = buildahCheckpointImage(ctx, containers)
@@ -1203,7 +1202,7 @@ func buildahCheckpointImage(ctx context.Context, containers []Container) error {
 	return nil
 }
 
-func tryBuildah(ctx context.Context) {
+func tryBuildah(ctx context.Context, container Container) error {
 	buildStoreOptions, err := storage.DefaultStoreOptionsAutoDetectUID()
 	if err != nil {
 		panic(err)
@@ -1235,7 +1234,7 @@ func tryBuildah(ctx context.Context) {
 	}
 	defer builder.Delete()
 
-	err = builder.Add("/home/node/", false, buildah.AddAndCopyOptions{}, "script.js")
+	err = builder.Add("/home/node/checkpoint", false, buildah.AddAndCopyOptions{}, container.ID+".tar")
 	if err != nil {
 		panic(err)
 	}
@@ -1263,4 +1262,6 @@ func tryBuildah(ctx context.Context) {
 	}
 
 	fmt.Printf("Image built! %s\n", imageId)
+
+	return nil
 }
