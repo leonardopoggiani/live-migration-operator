@@ -1015,7 +1015,7 @@ func tryBuildah(ctx context.Context, container Container) error {
 */
 
 func buildImageSkopeo(containerID string) {
-	checkpointTar := "/home/ubuntu/live-migration/checkpoint/" + containerID + ".tar"
+	checkpointTar := "/home/ubuntu/live-migration-operator/checkpoint/" + containerID + ".tar"
 	imageName := "docker.io/leonardopoggiani/checkpoint-images:" + containerID
 
 	cmd := exec.Command("skopeo", "copy", "oci-archive:"+checkpointTar, imageName)
