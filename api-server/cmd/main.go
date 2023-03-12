@@ -6,7 +6,6 @@ import (
 	"github.com/containers/storage/pkg/unshare"
 	livemigrationv1 "github.com/leonardopoggiani/live-migration-operator/api/v1alpha1"
 	"github.com/leonardopoggiani/live-migration-operator/controllers"
-	"k8s.io/klog/v2"
 	"os"
 
 	"k8s.io/apimachinery/pkg/runtime"
