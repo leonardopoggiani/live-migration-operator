@@ -4,10 +4,6 @@ import (
 	"sync"
 )
 
-// var (
-// 	log = kubelog.Log.WithName("api-server")
-// )
-
 type errSignaler struct {
 	// errSignal indicates that an error occurred, when closed.  It shouldn't
 	// be written to.

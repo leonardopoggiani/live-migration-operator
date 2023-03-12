@@ -29,6 +29,7 @@ import (
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/clientcmd"
 	"k8s.io/klog/v2"
+	"log"
 	"math/rand"
 	"os"
 	"os/exec"
@@ -362,9 +363,10 @@ func (r *LiveMigrationReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 	// what i have to use on the checkpointImage?
 	// building image with buildah
 
-	// for _, container := range containers {
-	//	tryBuildah(ctx, container)
-	//}
+	for _, container := range containers {
+		//	tryBuildah(ctx, container)
+		buildImageSkopeo(container.ID)
+	}
 
 	err = createCheckpointImage(containers)
 	// err = buildahCheckpointImage(ctx, containers)
@@ -968,7 +970,7 @@ func tryBuildah(ctx context.Context, container Container) error {
 	defer buildStore.Shutdown(false)
 
 	builderOpts := buildah.BuilderOptions{
-		FromImage:    "node:12-alpine",
+		FromImage:    "node:16-alpine",
 		Capabilities: capabilitiesForRoot,
 	}
 
@@ -1011,3 +1013,17 @@ func tryBuildah(ctx context.Context, container Container) error {
 }
 
 */
+
+func buildImageSkopeo(containerID string) {
+	checkpointTar := "/home/ubuntu/live-migration/checkpoint/" + containerID + ".tar"
+	imageName := "docker.io/leonardopoggiani/checkpoint-images:" + containerID
+
+	cmd := exec.Command("skopeo", "copy", "oci-archive:"+checkpointTar, imageName)
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+
+	err := cmd.Run()
+	if err != nil {
+		log.Fatalf("failed to create OCI image: %v", err)
+	}
+}
