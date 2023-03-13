@@ -703,16 +703,32 @@ func (r *LiveMigrationReconciler) restorePodCrio(podName string, namespace strin
 	}
 
 	restoredPod := createRestoredPod(podName, namespace, destinationHost)
+	// Aggiorna il campo nodeSelector del Pod.
+	restoredPod.Spec.NodeSelector = map[string]string{
+		"kubernetes.io/hostname": destinationHost,
+	}
 
+	// Aggiorna il Pod.
+	_, err = clientset.CoreV1().Pods("default").Update(context.Background(), restoredPod, metav1.UpdateOptions{})
+	if err != nil {
+		panic(err)
+	}
+
+	i := 0
 	for _, container := range containers {
+
+		klog.Infof("restoring container %d %s", i, container.Name)
 
 		newContainer := core.Container{
 			Name:  container.Name,
 			Image: "docker.io/leonardopoggiani/checkpoint-images:" + container.ID,
 		}
+
 		restoredPod.Spec.Containers = append(restoredPod.Spec.Containers, newContainer)
 
-		klog.Infof("restored pod %s", restoredPod.Spec.Containers[0].Image)
+		klog.Infof("restored pod %s", restoredPod.Spec.Containers[i].Name)
+		i += 1
+
 		// Update the pod
 		_, err = podClient.Create(context.Background(), restoredPod, metav1.CreateOptions{})
 		if err != nil {
@@ -746,9 +762,6 @@ func createRestoredPod(restoredName string, restoredNamespace string, destinatio
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      restoredName,
 			Namespace: restoredNamespace,
-			Annotations: map[string]string{
-				"kubernetes.io/hostname": destinationHost,
-			},
 		},
 	}
 }

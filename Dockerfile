@@ -1,21 +1,22 @@
 # Build the manager binary
-FROM docker.io/golang:latest as builder
+FROM docker.io/ubuntu:latest as builder
 
 WORKDIR /workspace
 
 COPY go.mod go.mod
 COPY go.sum go.sum
 
-RUN go mod tidy
-
-RUN go mod download
-
 COPY . ./
 
 RUN apt-get update && \
-    apt-get install ca-certificates && \
+    apt-get install ca-certificates -y && \
     update-ca-certificates && \
-    apt-get install libbtrfs-dev libdevmapper-dev -y gpg golang-github-proglottis-gpgme-dev libgpgme11 libgpgmepp-dev && \
+    apt-get install libbtrfs-dev libdevmapper-dev gpg golang-github-proglottis-gpgme-dev libgpgme11 libgpgmepp-dev -y && \
+    wget https://go.dev/dl/go1.20.2.linux-amd64.tar.gz && \
+    rm -rf /usr/local/go && tar -C /usr/local -xzf go1.20.2.linux-amd64.tar.gz && \
+    export PATH=$PATH:/usr/local/go/bin && \
+    go version && \
+    go mod tidy && \
     go mod download && \
     go get github.com/containers/buildah && \
     rm -rf /var/cache/apk/*

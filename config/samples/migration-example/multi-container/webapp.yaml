@@ -25,12 +25,8 @@ spec:
       volumeMounts:
         - name: db-data
           mountPath: /var/lib/mysql
-  tolerations:
-    - key: "node-role.kubernetes.io/master"
-      operator: "Exists"
-      effect: "NoSchedule"
   nodeSelector:
-    dedicated: master
+    kubernetes.io/hostname: poggiani-1-master
   volumes:
     - name: db-data
       emptyDir: {}
