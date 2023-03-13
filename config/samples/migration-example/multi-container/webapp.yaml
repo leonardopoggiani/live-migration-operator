@@ -9,8 +9,6 @@ kind: Pod
 metadata:
   name: multi-container-pod
   namespace: liqo-demo
-  annotations:
-    scheduler.alpha.kubernetes.io/node-selector: "kubernetes.io/hostname=poggiani-1-master"
 spec:
   containers:
     - name: web
@@ -33,6 +31,12 @@ spec:
       volumeMounts:
         - name: db-data
           mountPath: /var/lib/mysql
+  tolerations:
+      - key: "node-role.kubernetes.io/master"
+        operator: "Exists"
+        effect: "NoSchedule"
+    nodeSelector:
+      dedicated: master
   volumes:
     - name: db-data
       emptyDir: {}
