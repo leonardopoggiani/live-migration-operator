@@ -33,6 +33,8 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y libbtrfs-dev libdevmapper-dev libgpgme-dev
+          go mod download
+          go get github.com/containers/buildah
           go build -o live-migration-operator .
 
       - name: Build and push
