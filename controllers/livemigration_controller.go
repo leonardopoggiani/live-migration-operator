@@ -33,7 +33,6 @@ import (
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/clientcmd"
 	"k8s.io/klog/v2"
-	"log"
 	"math/rand"
 	"os"
 	"os/exec"
@@ -375,7 +374,10 @@ func (r *LiveMigrationReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 
 	for _, container := range containers {
 		klog.Infof("containerID: %s", container.ID)
-		tryBuildah(ctx, container)
+		err := tryBuildah(ctx, container)
+		if err != nil {
+			klog.ErrorS(err, "unable to build image", "container", container.Name, "ID", container.ID)
+		}
 		// buildImageSkopeo(container.ID)
 	}
 
@@ -707,7 +709,7 @@ func (r *LiveMigrationReconciler) restorePodCrio(podName string, namespace strin
 		klog.Errorf("Pod is not correctly deleted!", "podName", podName, "namespace", namespace)
 	}
 
-	restoredPod := createRestoredPod(podName, namespace, destinationHost)
+	restoredPod := createRestoredPod(podName, namespace)
 	// Aggiorna il campo nodeSelector del Pod.
 	restoredPod.Spec.NodeSelector = map[string]string{
 		"kubernetes.io/hostname": destinationHost,
@@ -765,7 +767,7 @@ func (r *LiveMigrationReconciler) restorePodCrio(podName string, namespace strin
 	return nil
 }
 
-func createRestoredPod(restoredName string, restoredNamespace string, destinationHost string) *core.Pod {
+func createRestoredPod(restoredName string, restoredNamespace string) *core.Pod {
 	return &core.Pod{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      restoredName,
@@ -1013,14 +1015,8 @@ func tryBuildah(ctx context.Context, container Container) error {
 	} else {
 		klog.Infof("", "builder created", builder.ContainerID)
 	}
-	defer func(builder *buildah.Builder) {
-		err := builder.Delete()
-		if err != nil {
 
-		}
-	}(builder)
-
-	err = builder.Add(builder.ContainerID, false, buildah.AddAndCopyOptions{}, "checkpoint/"+container.ID+".tar")
+	err = builder.Add(builder.ContainerID, true, buildah.AddAndCopyOptions{}, "checkpoint/"+container.ID+".tar")
 	if err != nil {
 		panic(err)
 	}
@@ -1035,7 +1031,7 @@ func tryBuildah(ctx context.Context, container Container) error {
 		panic(err)
 	}
 
-	pushCheckpointCmd := exec.Command("/bin/sh", "-c", "buildah push leonardopoggiani/checkpoint-images:"+container.ID+" docker.io/leonardopoggiani/checkpoint-images:"+container.ID)
+	pushCheckpointCmd := exec.Command("/bin/sh", "-c", "sudo buildah push leonardopoggiani/checkpoint-images:"+container.ID+" docker.io/leonardopoggiani/checkpoint-images:"+container.ID)
 	// pushCheckpointCmd := exec.Command("sudo", "buildah", "push", "localhost/checkpoint-image:"+container.ID, "leonardopoggiani/checkpoint-images:"+container.ID)
 	if err = pushCheckpointCmd.Run(); err != nil {
 		return fmt.Errorf("failed to push checkpoint image to container image registry: %v", err)
@@ -1046,18 +1042,4 @@ func tryBuildah(ctx context.Context, container Container) error {
 	fmt.Printf("Try image built! %s\n", imageId)
 
 	return nil
-}
-
-func buildImageSkopeo(containerID string) {
-	checkpointTar := "/home/ubuntu/live-migration-operator/checkpoint/" + containerID + ".tar"
-	imageName := "docker/checkpoint-images:" + containerID
-
-	cmd := exec.Command("skopeo", "copy", "oci-archive:"+checkpointTar, imageName)
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-
-	err := cmd.Run()
-	if err != nil {
-		log.Fatalf("failed to create OCI image: %v", err)
-	}
 }
