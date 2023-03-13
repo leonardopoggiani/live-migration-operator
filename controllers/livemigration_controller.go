@@ -709,7 +709,7 @@ func (r *LiveMigrationReconciler) restorePodCrio(podName string, namespace strin
 	}
 
 	// Aggiorna il Pod.
-	_, err = clientset.CoreV1().Pods("default").Update(context.Background(), restoredPod, metav1.UpdateOptions{})
+	_, err = clientset.CoreV1().Pods("liqo-demo").Update(context.Background(), restoredPod, metav1.UpdateOptions{})
 	if err != nil {
 		panic(err)
 	}
