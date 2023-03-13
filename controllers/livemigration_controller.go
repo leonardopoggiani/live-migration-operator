@@ -922,62 +922,6 @@ func createCheckpointImage(containers []Container) error {
 	return nil
 }
 
-/*
-func buildahCheckpointImage(ctx context.Context, containers []Container) error {
-	buildStoreOptions, err := storage.DefaultStoreOptionsAutoDetectUID()
-	if err != nil {
-		return fmt.Errorf("failed to get default store options: %v", err)
-	}
-
-	conf, err := config.Default()
-	if err != nil {
-		panic(err)
-	}
-	capabilitiesForRoot, err := conf.Capabilities("root", nil, nil)
-	if err != nil {
-		panic(err)
-	}
-
-	buildStore, err := storage.GetStore(buildStoreOptions)
-	if err != nil {
-		return fmt.Errorf("failed to get store: %v", err)
-	}
-	defer buildStore.Shutdown(false)
-
-	for _, container := range containers {
-		builderOpts := buildah.BuilderOptions{
-			FromImage:    "scratch", // base image
-			Capabilities: capabilitiesForRoot,
-		}
-
-		builder, err := buildah.NewBuilder(ctx, buildStore, builderOpts)
-		if err != nil {
-			return fmt.Errorf("failed to create builder: %v", err)
-		}
-		defer builder.Delete()
-
-		// Copy the checkpoint file to the root directory of the container
-		err = builder.Add(builder.Container, false, buildah.AddAndCopyOptions{}, "/home/ubuntu/live-migration/checkpoint/"+container.ID+".tar")
-		if err != nil {
-			panic(err)
-		}
-
-		imageRef, err := is.Transport.ParseStoreReference(buildStore, "docker.io/leonardopoggiani/checkpoint-images:"+container.ID)
-		if err != nil {
-			panic(err)
-		}
-
-		imageID, _, _, err := builder.Commit(ctx, imageRef, buildah.CommitOptions{})
-		if err != nil {
-			panic(err)
-		}
-		fmt.Printf("Image built! %s\n", imageID)
-	}
-
-	return nil
-}
-*/
-
 func tryBuildah(ctx context.Context, container Container) error {
 	buildStoreOptions, err := storage.DefaultStoreOptionsAutoDetectUID()
 	if err != nil {
@@ -1013,12 +957,23 @@ func tryBuildah(ctx context.Context, container Container) error {
 	if err != nil {
 		panic(err)
 	} else {
-		klog.Infof("", "builder created", builder.ContainerID)
+		klog.Infof("", "builder created", builder.Container)
 	}
 
-	err = builder.Add(builder.ContainerID, false, buildah.AddAndCopyOptions{}, "checkpoint/"+container.ID+".tar")
+	// err = builder.Add(builder.ContainerID, false, buildah.AddAndCopyOptions{}, "checkpoint/"+container.ID+".tar")
+	addCheckpointCmd := exec.Command("/bin/sh", "-c", "sudo buildah add "+builder.Container+" /home/ubuntu/live-migration-operator/checkpoint/"+container.ID+".tar /")
+	// addCheckpointCmd := exec.Command("sudo", "buildah", "add", newContainer, "/home/ubuntu/live-migration-operator/checkpoint/"+container.ID+".tar")
+	err = addCheckpointCmd.Run()
 	if err != nil {
-		panic(err)
+		return fmt.Errorf("failed to add checkpoint to container: %v", err)
+	}
+
+	klog.Infof("", "checkpoint added to container", container.Name)
+	configCheckpointCmd := exec.Command("/bin/sh", "-c", "sudo buildah config --annotation=io.kubernetes.cri-o.annotations.checkpoint.name="+container.Name+" "+builder.Container)
+	// configCheckpointCmd := exec.Command("sudo", "buildah", "config", "--annotation=io.kubernetes.cri-o.annotations.checkpoint.name="+container.Name, newContainer)
+	err = configCheckpointCmd.Run()
+	if err != nil {
+		return fmt.Errorf("failed to configure checkpoint annotation: %v", err)
 	}
 
 	imageRef, err := is.Transport.ParseStoreReference(buildStore, "leonardopoggiani/checkpoint-images:"+container.ID)
