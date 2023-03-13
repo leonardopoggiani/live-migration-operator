@@ -942,7 +942,7 @@ func tryBuildah(ctx context.Context, container Container) error {
 		panic(err)
 	}
 	defer func(buildStore storage.Store, force bool) {
-		_, err := buildStore.Shutdown(force)
+		_, err = buildStore.Shutdown(force)
 		if err != nil {
 
 		}
@@ -959,6 +959,17 @@ func tryBuildah(ctx context.Context, container Container) error {
 	} else {
 		klog.Infof("", "builder created", builder.Container)
 	}
+
+	newContainerCmd := exec.Command("/bin/sh", "-c", "sudo buildah from scratch")
+	// newContainerCmd := exec.Command("sudo", "buildah", "from", "scratch")
+	newContainerOutput, err := newContainerCmd.Output()
+	if err != nil {
+		return fmt.Errorf("failed to create new container: %v", err)
+	}
+	newContainer := string(newContainerOutput)
+
+	klog.Infof("", "new container name", newContainer)
+	klog.Infof("", "checkpoint path -> ", "/home/ubuntu/live-migration-operator/checkpoint/"+container.ID+".tar")
 
 	// err = builder.Add(builder.ContainerID, false, buildah.AddAndCopyOptions{}, "checkpoint/"+container.ID+".tar")
 
