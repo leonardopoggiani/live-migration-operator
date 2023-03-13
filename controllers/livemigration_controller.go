@@ -976,7 +976,7 @@ func tryBuildah(ctx context.Context, container Container) error {
 	authFile := "/run/user/1000/containers/auth.json"
 	localCheckpointPath = "localhost/" + localCheckpointPath
 	remoteCheckpointPath := "docker://docker.io/leonardopoggiani/checkpoint-images:" + container.ID
-	pushCheckpointCmd := exec.Command("sudo", "buildah", "push", "--auth-file", authFile, localCheckpointPath, remoteCheckpointPath)
+	pushCheckpointCmd := exec.Command("sudo", "buildah", "push", "--authfile", authFile, localCheckpointPath, remoteCheckpointPath)
 	//pushCheckpointCmd := exec.Command("/bin/sh", "-c", "sudo buildah push --authfile /run/user/1000/containers/auth.json localhost/leonardopoggiani/checkpoint-images:"+container.ID+" docker://docker.io/leonardopoggiani/checkpoint-images:"+container.ID)
 	klog.Infof(pushCheckpointCmd.String())
 	// pushCheckpointCmd := exec.Command("sudo", "buildah", "push", "localhost/checkpoint-image:"+container.ID, "leonardopoggiani/checkpoint-images:"+container.ID)
