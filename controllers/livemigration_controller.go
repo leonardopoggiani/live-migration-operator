@@ -715,7 +715,7 @@ func (r *LiveMigrationReconciler) restorePodCrio(podName string, namespace strin
 
 		newContainer := core.Container{
 			Name:  container.Name,
-			Image: "leonardopoggiani/checkpoint-images:" + container.ID,
+			Image: "docker.io/leonardopoggiani/checkpoint-images:" + container.ID,
 		}
 
 		restoredPod.Spec.Containers = append(restoredPod.Spec.Containers, newContainer)
