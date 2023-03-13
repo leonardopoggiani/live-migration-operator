@@ -31,11 +31,10 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
       - name: Build Go packages
         run: |
-          sudo apt-get update
-          sudo apt-get install -y libbtrfs-dev libdevmapper-dev libgpgme-dev
-          go mod download
+          sudo apt update
+          sudo apt install -y libbtrfs-dev libdevmapper-dev libgpgme-dev
           go get github.com/containers/buildah
-          go build -o live-migration-operator .
+          go build -o live-migration-operator .api/
 
       - name: Build and push
         uses: docker/build-push-action@v4

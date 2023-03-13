@@ -636,7 +636,10 @@ func (r *LiveMigrationReconciler) updateAnnotations(ctx context.Context, pod *co
 
 func (r *LiveMigrationReconciler) checkpointPodCrio(containerID string) error {
 
-	// Construct the cri-o checkpoint command.
+	if _, err := exec.Command("sudo", "rm", "-rf", "/home/ubuntu/live-migration-operator/checkpoint/*").Output(); err != nil {
+		return err
+	}
+
 	checkpointCmd := exec.Command("/bin/sh", "-c", "crictl checkpoint --export=/home/ubuntu/live-migration-operator/checkpoint/"+containerID+".tar "+containerID)
 	time.Sleep(2 * time.Second)
 	// Execute the checkpoint command.
