@@ -4,6 +4,8 @@ go 1.20
 
 require (
 	github.com/containers/buildah v1.29.1
+	github.com/containers/common v0.51.0
+	github.com/containers/image/v5 v5.24.2
 	github.com/containers/storage v1.45.4
 	github.com/emicklei/go-restful/v3 v3.10.2
 	github.com/onsi/ginkgo/v2 v2.9.0
@@ -33,8 +35,6 @@ require (
 	github.com/containerd/stargz-snapshotter/estargz v0.14.1 // indirect
 	github.com/containernetworking/cni v1.1.2 // indirect
 	github.com/containernetworking/plugins v1.2.0 // indirect
-	github.com/containers/common v0.51.0 // indirect
-	github.com/containers/image/v5 v5.24.1 // indirect
 	github.com/containers/libtrust v0.0.0-20230121012942-c1716e8a8d01 // indirect
 	github.com/containers/ocicrypt v1.1.7 // indirect
 	github.com/cyberphone/json-canonicalization v0.0.0-20220623050100-57a0ce2678a7 // indirect
@@ -146,12 +146,12 @@ require (
 	go.uber.org/zap v1.24.0 // indirect
 	golang.org/x/crypto v0.5.0 // indirect
 	golang.org/x/mod v0.8.0 // indirect
-	golang.org/x/net v0.7.0 // indirect
+	golang.org/x/net v0.8.0 // indirect
 	golang.org/x/oauth2 v0.4.0 // indirect
 	golang.org/x/sync v0.1.0 // indirect
-	golang.org/x/sys v0.5.0 // indirect
-	golang.org/x/term v0.5.0 // indirect
-	golang.org/x/text v0.7.0 // indirect
+	golang.org/x/sys v0.6.0 // indirect
+	golang.org/x/term v0.6.0 // indirect
+	golang.org/x/text v0.8.0 // indirect
 	golang.org/x/time v0.3.0 // indirect
 	golang.org/x/tools v0.6.0 // indirect
 	gomodules.xyz/jsonpatch/v2 v2.2.0 // indirect
