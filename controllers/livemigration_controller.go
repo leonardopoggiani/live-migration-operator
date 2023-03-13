@@ -19,6 +19,11 @@ package controllers
 import (
 	"context"
 	"fmt"
+	"github.com/containers/buildah"
+	"github.com/containers/buildah/pkg/parse"
+	"github.com/containers/common/pkg/config"
+	is "github.com/containers/image/v5/storage"
+	"github.com/containers/storage"
 	api "github.com/leonardopoggiani/live-migration-operator/api/v1alpha1"
 	appsv1 "k8s.io/api/apps/v1"
 	core "k8s.io/api/core/v1"
@@ -363,18 +368,21 @@ func (r *LiveMigrationReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 	// what i have to use on the checkpointImage?
 	// building image with buildah
 
-	// for _, container := range containers {
-	//	tryBuildah(ctx, container)
-	// buildImageSkopeo(container.ID)
-	// 2}
-
-	err = createCheckpointImage(containers)
-	// err = buildahCheckpointImage(ctx, containers)
-	if err != nil {
-		klog.ErrorS(err, "unable to create checkpoint image", "pod", migratingPod.Name)
-	} else {
-		klog.Infof("checkpoint image created")
+	for _, container := range containers {
+		klog.Infof("containerID: %s", container.ID)
+		tryBuildah(ctx, container)
+		// buildImageSkopeo(container.ID)
 	}
+
+	/*
+		err = createCheckpointImage(containers)
+		err = buildahCheckpointImage(ctx, containers)
+		if err != nil {
+			klog.ErrorS(err, "unable to create checkpoint image", "pod", migratingPod.Name)
+		} else {
+			klog.Infof("checkpoint image created")
+		}
+	*/
 
 	err = r.restorePodCrio(migratingPod.Name, req.Namespace, containers, clientset, migratingPod.Spec.DestHost)
 	if err != nil {
@@ -947,6 +955,7 @@ func buildahCheckpointImage(ctx context.Context, containers []Container) error {
 
 	return nil
 }
+*/
 
 func tryBuildah(ctx context.Context, container Container) error {
 	buildStoreOptions, err := storage.DefaultStoreOptionsAutoDetectUID()
@@ -967,7 +976,12 @@ func tryBuildah(ctx context.Context, container Container) error {
 	if err != nil {
 		panic(err)
 	}
-	defer buildStore.Shutdown(false)
+	defer func(buildStore storage.Store, force bool) {
+		_, err := buildStore.Shutdown(force)
+		if err != nil {
+
+		}
+	}(buildStore, false)
 
 	builderOpts := buildah.BuilderOptions{
 		FromImage:    "node:16-alpine",
@@ -980,7 +994,12 @@ func tryBuildah(ctx context.Context, container Container) error {
 	} else {
 		klog.Infof("", "builder created", builder.ContainerID)
 	}
-	defer builder.Delete()
+	defer func(builder *buildah.Builder) {
+		err := builder.Delete()
+		if err != nil {
+
+		}
+	}(builder)
 
 	err = builder.Add(builder.ContainerID, false, buildah.AddAndCopyOptions{}, "checkpoint/"+container.ID+".tar")
 	if err != nil {
@@ -1011,8 +1030,6 @@ func tryBuildah(ctx context.Context, container Container) error {
 
 	return nil
 }
-
-*/
 
 func buildImageSkopeo(containerID string) {
 	checkpointTar := "/home/ubuntu/live-migration-operator/checkpoint/" + containerID + ".tar"
