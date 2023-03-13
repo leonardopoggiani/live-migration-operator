@@ -275,6 +275,12 @@ func (r *LiveMigrationReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 			klog.ErrorS(err, "unable to print containerIDs")
 		}
 
+		if _, err := exec.Command("/bin/sh", "-c", "sudo rm -rf /home/ubuntu/live-migration-operator/checkpoint/*").CombinedOutput(); err != nil {
+			klog.ErrorS(err, "unable to delete checkpoint folder")
+		} else {
+			klog.InfoS("deleted checkpoint folder")
+		}
+
 		for _, container := range containers {
 			// TODO: Check if the container is running.
 
@@ -635,12 +641,6 @@ func (r *LiveMigrationReconciler) updateAnnotations(ctx context.Context, pod *co
 }
 
 func (r *LiveMigrationReconciler) checkpointPodCrio(containerID string) error {
-
-	if _, err := exec.Command("/bin/sh", "-c", "sudo rm -rf /home/ubuntu/live-migration-operator/checkpoint/*").CombinedOutput(); err != nil {
-		return err
-	} else {
-		klog.InfoS("deleted checkpoint folder")
-	}
 
 	checkpointCmd := exec.Command("/bin/sh", "-c", "crictl checkpoint --export=/home/ubuntu/live-migration-operator/checkpoint/"+containerID+".tar "+containerID)
 	time.Sleep(2 * time.Second)
