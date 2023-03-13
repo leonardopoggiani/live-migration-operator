@@ -3,9 +3,9 @@ module github.com/leonardopoggiani/live-migration-operator
 go 1.20
 
 require (
-	github.com/containers/buildah v1.26.2
-	github.com/containers/common v0.48.1
-	github.com/containers/image/v5 v5.21.1
+	github.com/containers/buildah v1.29.1
+	github.com/containers/common v0.51.0
+	github.com/containers/image/v5 v5.24.2
 	github.com/containers/storage v1.45.4
 	github.com/emicklei/go-restful/v3 v3.10.2
 	github.com/onsi/ginkgo/v2 v2.9.1
@@ -19,6 +19,7 @@ require (
 
 require (
 	github.com/Azure/go-ansiterm v0.0.0-20210617225240-d185dfc1b5a1 // indirect
+	github.com/google/pprof v0.0.0-20210407192527-94a9f03dee38 // indirect
 	github.com/BurntSushi/toml v1.2.1 // indirect
 	github.com/Microsoft/go-winio v0.6.0 // indirect
 	github.com/Microsoft/hcsshim v0.9.7 // indirect
