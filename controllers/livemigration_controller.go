@@ -363,10 +363,10 @@ func (r *LiveMigrationReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 	// what i have to use on the checkpointImage?
 	// building image with buildah
 
-	for _, container := range containers {
-		//	tryBuildah(ctx, container)
-		buildImageSkopeo(container.ID)
-	}
+	// for _, container := range containers {
+	//	tryBuildah(ctx, container)
+	// buildImageSkopeo(container.ID)
+	// 2}
 
 	err = createCheckpointImage(containers)
 	// err = buildahCheckpointImage(ctx, containers)
@@ -1016,7 +1016,7 @@ func tryBuildah(ctx context.Context, container Container) error {
 
 func buildImageSkopeo(containerID string) {
 	checkpointTar := "/home/ubuntu/live-migration-operator/checkpoint/" + containerID + ".tar"
-	imageName := "docker.io/leonardopoggiani/checkpoint-images:" + containerID
+	imageName := "docker/checkpoint-images:" + containerID
 
 	cmd := exec.Command("skopeo", "copy", "oci-archive:"+checkpointTar, imageName)
 	cmd.Stdout = os.Stdout
