@@ -949,21 +949,35 @@ func tryBuildah(ctx context.Context, container Container) error {
 		klog.Infof("", "checkpoint added to container", container.Name)
 	}
 
-	configCheckpointCmd := exec.Command("/bin/sh", "-c", "sudo buildah config --annotation=io.kubernetes.cri-o.annotations.checkpoint.name="+container.Name+" "+newContainer)
+	annotation := "--annotation=io.kubernetes.cri-o.annotations.checkpoint.name=" + container.Name
+	configCheckpointCmd := exec.Command("sudo", "buildah", "config", annotation, newContainer)
+	//configCheckpointCmd := exec.Command("/bin/sh", "-c", "sudo buildah config --annotation=io.kubernetes.cri-o.annotations.checkpoint.name="+container.Name+" "+newContainer)
 	// configCheckpointCmd := exec.Command("sudo", "buildah", "config", "--annotation=io.kubernetes.cri-o.annotations.checkpoint.name="+container.Name, newContainer)
-	err = configCheckpointCmd.Run()
+	out, err = configCheckpointCmd.CombinedOutput()
 	if err != nil {
-		return fmt.Errorf("failed to configure checkpoint annotation: %v", err)
+		klog.ErrorS(err, "failed to configure checkpoint annotation")
+		klog.Infof("out: %s", out)
+	} else {
+		klog.Infof("", "checkpoint annotation configured", container.Name)
 	}
 
-	commitCheckpointCmd := exec.Command("/bin/sh", "-c", "sudo buildah commit "+newContainer+" leonardopoggiani/checkpoint-image:"+container.ID)
+	localCheckpointPath := "leonardopoggiani/checkpoint-image:" + container.ID
+	commitCheckpointCmd := exec.Command("sudo", "buildah", "commit", newContainer, localCheckpointPath)
+	// commitCheckpointCmd := exec.Command("/bin/sh", "-c", "sudo buildah commit "+newContainer+" leonardopoggiani/checkpoint-image:"+container.ID)
 	// commitCheckpointCmd := exec.Command("sudo", "buildah", "commit", newContainer, "localhost/checkpoint-image:"+container.ID)
-	err = commitCheckpointCmd.Run()
+	out, err = commitCheckpointCmd.CombinedOutput()
 	if err != nil {
-		return fmt.Errorf("failed to commit checkpoint image: %v", err)
+		klog.ErrorS(err, "failed to commit checkpoint")
+		klog.Infof("out: %s", out)
+	} else {
+		klog.Infof("", "checkpoint commited", container.Name)
 	}
 
-	pushCheckpointCmd := exec.Command("/bin/sh", "-c", "sudo buildah push --authfile /run/user/1000/containers/auth.json localhost/leonardopoggiani/checkpoint-images:"+container.ID+" docker://docker.io/leonardopoggiani/checkpoint-images:"+container.ID)
+	authFile := "/run/user/1000/containers/auth.json"
+	localCheckpointPath = "localhost/" + localCheckpointPath
+	remoteCheckpointPath := "docker://docker.io/leonardopoggiani/checkpoint-images:" + container.ID
+	pushCheckpointCmd := exec.Command("sudo", "buildah", "push", "--auth-file", authFile, localCheckpointPath, remoteCheckpointPath)
+	//pushCheckpointCmd := exec.Command("/bin/sh", "-c", "sudo buildah push --authfile /run/user/1000/containers/auth.json localhost/leonardopoggiani/checkpoint-images:"+container.ID+" docker://docker.io/leonardopoggiani/checkpoint-images:"+container.ID)
 	klog.Infof(pushCheckpointCmd.String())
 	// pushCheckpointCmd := exec.Command("sudo", "buildah", "push", "localhost/checkpoint-image:"+container.ID, "leonardopoggiani/checkpoint-images:"+container.ID)
 	if err = pushCheckpointCmd.Run(); err != nil {
