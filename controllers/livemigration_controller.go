@@ -963,7 +963,8 @@ func tryBuildah(ctx context.Context, container Container) error {
 		return fmt.Errorf("failed to commit checkpoint image: %v", err)
 	}
 
-	pushCheckpointCmd := exec.Command("/bin/sh", "-c", "buildah push leonardopoggiani/checkpoint-images:"+container.ID+" docker.io/leonardopoggiani/checkpoint-images:"+container.ID)
+	pushCheckpointCmd := exec.Command("/bin/sh", "-c", "buildah push --authfile /run/user/1000/containers/auth.json leonardopoggiani/checkpoint-images:"+container.ID+" docker.io/leonardopoggiani/checkpoint-images:"+container.ID)
+	klog.Infof(pushCheckpointCmd.String())
 	// pushCheckpointCmd := exec.Command("sudo", "buildah", "push", "localhost/checkpoint-image:"+container.ID, "leonardopoggiani/checkpoint-images:"+container.ID)
 	if err = pushCheckpointCmd.Run(); err != nil {
 		return fmt.Errorf("failed to push checkpoint image to container image registry: %v", err)
