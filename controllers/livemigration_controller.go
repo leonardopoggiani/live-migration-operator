@@ -715,21 +715,20 @@ func (r *LiveMigrationReconciler) restorePodCrio(podName string, namespace strin
 
 		newContainer := core.Container{
 			Name:  container.Name,
-			Image: "docker.io/leonardopoggiani/checkpoint-images:" + container.ID,
+			Image: "leonardopoggiani/checkpoint-images:" + container.ID,
 		}
 
 		restoredPod.Spec.Containers = append(restoredPod.Spec.Containers, newContainer)
 
 		klog.Infof("restored pod %s", restoredPod.Spec.Containers[i].Name)
 		i += 1
+	}
 
-		// Update the pod
-		_, err = podClient.Create(context.Background(), restoredPod, metav1.CreateOptions{})
-		if err != nil {
-			klog.ErrorS(err, "failed to update pod", "podName", podName, "namespace", namespace)
-			return err
-		}
-
+	// Update the pod
+	_, err = podClient.Create(context.Background(), restoredPod, metav1.CreateOptions{})
+	if err != nil {
+		klog.ErrorS(err, "failed to update pod", "podName", podName, "namespace", namespace)
+		return err
 	}
 
 	// first i create all the containers, then i wait for them to be ready
@@ -742,7 +741,7 @@ func (r *LiveMigrationReconciler) restorePodCrio(podName string, namespace strin
 		}
 
 		// Delete the old container.
-		deleteCmd := exec.Command("/bin/sh", "-c", "sudo crictl rm "+container.ID)
+		deleteCmd := exec.Command("/bin/sh", "-c", "crictl rm "+container.ID)
 		output, err := deleteCmd.CombinedOutput()
 		if err != nil {
 			klog.ErrorS(err, "failed to delete container", "containerID", container.ID, "output", string(output))
