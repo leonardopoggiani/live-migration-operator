@@ -936,10 +936,12 @@ func tryBuildah(ctx context.Context, container Container) error {
 	klog.Infof("\nsudo buildah add ", newContainer, " /home/ubuntu/live-migration-operator/checkpoint/"+container.ID+".tar /")
 	addCheckpointCmd := exec.Command("/bin/sh", "-c", "sudo buildah add ", newContainer, "/home/ubuntu/live-migration-operator/checkpoint/"+container.ID+".tar", "/")
 	// addCheckpointCmd := exec.Command("sudo", "buildah", "add", newContainer, "/home/ubuntu/live-migration-operator/checkpoint/"+container.ID+".tar")
-	out, err := addCheckpointCmd.CombinedOutput()
+	klog.Infof(addCheckpointCmd.String())
+
+	out, err := addCheckpointCmd.Output()
 	if err != nil {
 		klog.ErrorS(err, "failed to add checkpoint to container")
-		klog.Infof("out: %v", out)
+		klog.Infof("out: %s", out)
 	}
 
 	klog.Infof("", "checkpoint added to container", container.Name)
