@@ -1016,7 +1016,7 @@ func tryBuildah(ctx context.Context, container Container) error {
 		klog.Infof("", "builder created", builder.ContainerID)
 	}
 
-	err = builder.Add(builder.ContainerID, true, buildah.AddAndCopyOptions{}, "checkpoint/"+container.ID+".tar")
+	err = builder.Add(builder.ContainerID, false, buildah.AddAndCopyOptions{}, "checkpoint/"+container.ID+".tar")
 	if err != nil {
 		panic(err)
 	}
@@ -1031,7 +1031,7 @@ func tryBuildah(ctx context.Context, container Container) error {
 		panic(err)
 	}
 
-	pushCheckpointCmd := exec.Command("/bin/sh", "-c", "sudo buildah push leonardopoggiani/checkpoint-images:"+container.ID+" docker.io/leonardopoggiani/checkpoint-images:"+container.ID)
+	pushCheckpointCmd := exec.Command("/bin/sh", "-c", "buildah push leonardopoggiani/checkpoint-images:"+container.ID+" docker.io/leonardopoggiani/checkpoint-images:"+container.ID)
 	// pushCheckpointCmd := exec.Command("sudo", "buildah", "push", "localhost/checkpoint-image:"+container.ID, "leonardopoggiani/checkpoint-images:"+container.ID)
 	if err = pushCheckpointCmd.Run(); err != nil {
 		return fmt.Errorf("failed to push checkpoint image to container image registry: %v", err)
