@@ -637,8 +637,8 @@ func (r *LiveMigrationReconciler) updateAnnotations(ctx context.Context, pod *co
 func (r *LiveMigrationReconciler) checkpointPodCrio(containerID string) error {
 
 	// Construct the cri-o checkpoint command.
-	checkpointCmd := exec.Command("/bin/sh", "-c", "sudo crictl checkpoint --export=/home/ubuntu/live-migration-operator/checkpoint/"+containerID+".tar "+containerID)
-	time.Sleep(10 * time.Second)
+	checkpointCmd := exec.Command("/bin/sh", "-c", "crictl checkpoint --export=/home/ubuntu/live-migration-operator/checkpoint/"+containerID+".tar "+containerID)
+	time.Sleep(2 * time.Second)
 	// Execute the checkpoint command.
 	output, err := checkpointCmd.CombinedOutput()
 	if err != nil {
@@ -647,13 +647,13 @@ func (r *LiveMigrationReconciler) checkpointPodCrio(containerID string) error {
 		klog.InfoS("checkpointed pod", "container", containerID, "output", string(output))
 	}
 
-	err = os.Chmod("/home/ubuntu/live-migration-operator/checkpoint/"+containerID+".tar", 0777)
+	/*err = os.Chmod("/home/ubuntu/live-migration-operator/checkpoint/"+containerID+".tar", 0777)
 	if err != nil {
 		klog.ErrorS(err, "failed to give privilege", "container", containerID, "output", string(output))
 	} else {
 		klog.InfoS("gave privilege", "container", containerID, "output", string(output))
 	}
-
+	*/
 	return nil
 }
 
