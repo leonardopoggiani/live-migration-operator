@@ -1,6 +1,7 @@
 package multi_container
 
 import (
+	"bytes"
 	"k8s.io/klog/v2"
 	"os/exec"
 )
@@ -12,6 +13,7 @@ func main() {
 	if err != nil {
 		klog.ErrorS(err, "failed to create new container")
 	}
+	newContainerOutput = bytes.TrimRight(newContainerOutput, "\n") // remove trailing newline
 	newContainer := string(newContainerOutput)
 
 	klog.Infof("", "new container name", newContainer)
@@ -20,8 +22,8 @@ func main() {
 	// err = builder.Add(builder.ContainerID, false, buildah.AddAndCopyOptions{}, "checkpoint/"+container.ID+".tar")
 
 	klog.Infof("\nsudo buildah add ", newContainer, " /home/ubuntu/live-migration-operator/checkpoint/f63284008ee741f22570680b542ffce6a6ce82ca15fa50d64cf537037d36078a.tar /")
-	addCheckpointCmd := exec.Command("/bin/sh", "-c", "sudo buildah add ", newContainer, "/home/ubuntu/live-migration-operator/checkpoint/f63284008ee741f22570680b542ffce6a6ce82ca15fa50d64cf537037d36078a.tar", "/")
-	// addCheckpointCmd := exec.Command("sudo", "buildah", "add", newContainer, "/home/ubuntu/live-migration-operator/checkpoint/"+container.ID+".tar")
+	//addCheckpointCmd := exec.Command("/bin/sh", "-c", "sudo buildah add "+newContainer+"/home/ubuntu/live-migration-operator/checkpoint/f63284008ee741f22570680b542ffce6a6ce82ca15fa50d64cf537037d36078a.tar /")
+	addCheckpointCmd := exec.Command("sudo", "buildah", "add", newContainer, "/home/ubuntu/live-migration-operator/checkpoint/f63284008ee741f22570680b542ffce6a6ce82ca15fa50d64cf537037d36078a.tar")
 	klog.Infof(addCheckpointCmd.String())
 
 	out, err := addCheckpointCmd.CombinedOutput()

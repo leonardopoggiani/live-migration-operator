@@ -17,6 +17,7 @@ limitations under the License.
 package controllers
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	api "github.com/leonardopoggiani/live-migration-operator/api/v1alpha1"
@@ -926,6 +927,7 @@ func tryBuildah(ctx context.Context, container Container) error {
 	if err != nil {
 		return fmt.Errorf("failed to create new container: %v", err)
 	}
+	newContainerOutput = bytes.TrimRight(newContainerOutput, "\n") // remove trailing newline
 	newContainer := string(newContainerOutput)
 
 	klog.Infof("", "new container name", newContainer)
