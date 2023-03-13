@@ -708,12 +708,6 @@ func (r *LiveMigrationReconciler) restorePodCrio(podName string, namespace strin
 		"kubernetes.io/hostname": destinationHost,
 	}
 
-	// Aggiorna il Pod.
-	_, err = clientset.CoreV1().Pods("liqo-demo").Update(context.Background(), restoredPod, metav1.UpdateOptions{})
-	if err != nil {
-		panic(err)
-	}
-
 	i := 0
 	for _, container := range containers {
 
@@ -752,6 +746,12 @@ func (r *LiveMigrationReconciler) restorePodCrio(podName string, namespace strin
 		} else {
 			klog.InfoS("deleted container", "containerID", container.ID, "output", string(output))
 		}
+	}
+
+	// Aggiorna il Pod.
+	_, err = clientset.CoreV1().Pods("liqo-demo").Update(context.Background(), restoredPod, metav1.UpdateOptions{})
+	if err != nil {
+		panic(err)
 	}
 
 	return nil
