@@ -18,13 +18,13 @@ func main() {
 	newContainer := string(newContainerOutput)
 
 	klog.Infof("", "new container name", newContainer)
-	klog.Infof("", "checkpoint path -> ", "/home/ubuntu/live-migration-operator/checkpoint/f63284008ee741f22570680b542ffce6a6ce82ca15fa50d64cf537037d36078a.tar")
+	klog.Infof("", "checkpoint path -> ", "/home/ubuntu/live-migration-operator/checkpoint/e8dc4f0c99e4d062d6170af2f0e40dc7cc563b0158239b8e3e2c76ed36ed6202.tar")
 
 	// err = builder.Add(builder.ContainerID, false, buildah.AddAndCopyOptions{}, "checkpoint/"+container.ID+".tar")
 
-	klog.Infof("\nsudo buildah add ", newContainer, " /home/ubuntu/live-migration-operator/checkpoint/f63284008ee741f22570680b542ffce6a6ce82ca15fa50d64cf537037d36078a.tar /")
+	klog.Infof("\nsudo buildah add ", newContainer, " /home/ubuntu/live-migration-operator/checkpoint/e8dc4f0c99e4d062d6170af2f0e40dc7cc563b0158239b8e3e2c76ed36ed6202.tar /")
 	//addCheckpointCmd := exec.Command("/bin/sh", "-c", "sudo buildah add "+newContainer+"/home/ubuntu/live-migration-operator/checkpoint/f63284008ee741f22570680b542ffce6a6ce82ca15fa50d64cf537037d36078a.tar", "/")
-	addCheckpointCmd := exec.Command("sudo", "buildah", "add", newContainer, "/home/ubuntu/live-migration-operator/checkpoint/f63284008ee741f22570680b542ffce6a6ce82ca15fa50d64cf537037d36078a.tar")
+	addCheckpointCmd := exec.Command("sudo", "buildah", "add", newContainer, "/home/ubuntu/live-migration-operator/checkpoint/e8dc4f0c99e4d062d6170af2f0e40dc7cc563b0158239b8e3e2c76ed36ed6202.tar")
 	klog.Infof(addCheckpointCmd.String())
 
 	out, err := addCheckpointCmd.CombinedOutput()
@@ -42,14 +42,15 @@ func main() {
 		klog.ErrorS(err, "failed to add checkpoint name to container")
 	}
 
-	commitCheckpointCmd := exec.Command("/bin/sh", "-c", "sudo buildah commit "+newContainer+" leonardopoggiani/checkpoint-image:f63284008ee741f22570680b542ffce6a6ce82ca15fa50d64cf537037d36078a")
+	commitCheckpointCmd := exec.Command("/bin/sh", "-c", "sudo buildah commit "+newContainer+" leonardopoggiani/checkpoint-images:e8dc4f0c99e4d062d6170af2f0e40dc7cc563b0158239b8e3e2c76ed36ed6202")
 	// commitCheckpointCmd := exec.Command("sudo", "buildah", "commit", newContainer, "localhost/checkpoint-image:"+container.ID)
 	err = commitCheckpointCmd.Run()
 	if err != nil {
 		klog.ErrorS(err, "failed to commit checkpoint image")
 	}
 
-	pushCheckpointCmd := exec.Command("/bin/sh", "-c", "buildah push leonardopoggiani/checkpoint-images:f63284008ee741f22570680b542ffce6a6ce82ca15fa50d64cf537037d36078a docker.io/leonardopoggiani/checkpoint-images:f63284008ee741f22570680b542ffce6a6ce82ca15fa50d64cf537037d36078a")
+	pushCheckpointCmd := exec.Command("/bin/sh", "-c", "sudo buildah push localhost/leonardopoggiani/checkpoint-images docker.io/leonardopoggiani/checkpoint-images:e8dc4f0c99e4d062d6170af2f0e40dc7cc563b0158239b8e3e2c76ed36ed6202")
+	klog.Infof(pushCheckpointCmd.String())
 	// pushCheckpointCmd := exec.Command("sudo", "buildah", "push", "localhost/checkpoint-image:"+container.ID, "leonardopoggiani/checkpoint-images:"+container.ID)
 	if err = pushCheckpointCmd.Run(); err != nil {
 		klog.ErrorS(err, "failed to push checkpoint image")
