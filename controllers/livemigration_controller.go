@@ -933,12 +933,13 @@ func tryBuildah(ctx context.Context, container Container) error {
 
 	// err = builder.Add(builder.ContainerID, false, buildah.AddAndCopyOptions{}, "checkpoint/"+container.ID+".tar")
 
-	klog.Infof("sudo buildah add " + newContainer + " /home/ubuntu/live-migration-operator/checkpoint/" + container.ID + ".tar /")
-	addCheckpointCmd := exec.Command("/bin/sh", "-c", "buildah add "+newContainer+" /home/ubuntu/live-migration-operator/checkpoint/"+container.ID+".tar /")
+	klog.Infof("\nsudo buildah add " + newContainer + " /home/ubuntu/live-migration-operator/checkpoint/" + container.ID + ".tar /")
+	addCheckpointCmd := exec.Command("/bin/sh", "-c", "sudo buildah add "+newContainer+" /home/ubuntu/live-migration-operator/checkpoint/"+container.ID+".tar /")
 	// addCheckpointCmd := exec.Command("sudo", "buildah", "add", newContainer, "/home/ubuntu/live-migration-operator/checkpoint/"+container.ID+".tar")
-	err = addCheckpointCmd.Run()
+	out, err := addCheckpointCmd.CombinedOutput()
 	if err != nil {
-		return fmt.Errorf("failed to add checkpoint to container: %v", err)
+		klog.ErrorS(err, "failed to add checkpoint to container")
+		klog.Infof("out: %v", out)
 	}
 
 	klog.Infof("", "checkpoint added to container", container.Name)
