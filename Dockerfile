@@ -13,7 +13,7 @@ COPY . ./
 RUN apt-get update && \
     apt-get install ca-certificates && \
     update-ca-certificates && \
-    apt-get libbtrfs-dev libdevmapper-dev libgpgme-dev -y && \
+    apt-get install libbtrfs-dev libdevmapper-dev libgpgme-dev -y && \
     rm -rf /var/cache/apk/*
 
 RUN CGO_ENABLED=0 go build -o live-migrating-operator .
