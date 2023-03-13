@@ -3,9 +3,9 @@ module github.com/leonardopoggiani/live-migration-operator
 go 1.20
 
 require (
-	github.com/containers/buildah v1.29.1
-	github.com/containers/common v0.51.0
-	github.com/containers/image/v5 v5.24.1
+	github.com/containers/buildah v1.26.2
+	github.com/containers/common v0.48.1
+	github.com/containers/image/v5 v5.21.1
 	github.com/containers/storage v1.45.4
 	github.com/emicklei/go-restful/v3 v3.10.2
 	github.com/onsi/ginkgo/v2 v2.9.1

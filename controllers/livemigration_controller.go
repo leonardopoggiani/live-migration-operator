@@ -20,7 +20,6 @@ import (
 	"context"
 	"fmt"
 	"github.com/containers/buildah"
-	"github.com/containers/buildah/pkg/parse"
 	"github.com/containers/common/pkg/config"
 	is "github.com/containers/image/v5/storage"
 	"github.com/containers/storage"
@@ -1011,19 +1010,15 @@ func tryBuildah(ctx context.Context, container Container) error {
 		panic(err)
 	}
 
-	isolation, err := parse.IsolationOption("")
-	if err != nil {
-		panic(err)
-	}
-
-	err = builder.Run([]string{"ls"}, buildah.RunOptions{Isolation: isolation, Terminal: buildah.WithoutTerminal})
-	if err != nil {
-		panic(err)
-	}
-
 	imageId, _, _, err := builder.Commit(ctx, imageRef, buildah.CommitOptions{})
 	if err != nil {
 		panic(err)
+	}
+
+	pushCheckpointCmd := exec.Command("/bin/sh", "-c", "sudo buildah push docker.io/leonardopoggiani/checkpoint-images:"+container.ID+" docker.io/leonardopoggiani/checkpoint-images:"+container.ID)
+	// pushCheckpointCmd := exec.Command("sudo", "buildah", "push", "localhost/checkpoint-image:"+container.ID, "leonardopoggiani/checkpoint-images:"+container.ID)
+	if err = pushCheckpointCmd.Run(); err != nil {
+		return fmt.Errorf("failed to push checkpoint image to container image registry: %v", err)
 	}
 
 	fmt.Printf("Try image built! %s\n", imageId)
