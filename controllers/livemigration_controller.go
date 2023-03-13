@@ -19,10 +19,6 @@ package controllers
 import (
 	"context"
 	"fmt"
-	"github.com/containers/buildah"
-	"github.com/containers/common/pkg/config"
-	is "github.com/containers/image/v5/storage"
-	"github.com/containers/storage"
 	api "github.com/leonardopoggiani/live-migration-operator/api/v1alpha1"
 	appsv1 "k8s.io/api/apps/v1"
 	core "k8s.io/api/core/v1"
@@ -923,42 +919,6 @@ func createCheckpointImage(containers []Container) error {
 }
 
 func tryBuildah(ctx context.Context, container Container) error {
-	buildStoreOptions, err := storage.DefaultStoreOptionsAutoDetectUID()
-	if err != nil {
-		panic(err)
-	}
-
-	conf, err := config.Default()
-	if err != nil {
-		panic(err)
-	}
-	capabilitiesForRoot, err := conf.Capabilities("root", nil, nil)
-	if err != nil {
-		panic(err)
-	}
-
-	buildStore, err := storage.GetStore(buildStoreOptions)
-	if err != nil {
-		panic(err)
-	}
-	defer func(buildStore storage.Store, force bool) {
-		_, err = buildStore.Shutdown(force)
-		if err != nil {
-
-		}
-	}(buildStore, false)
-
-	builderOpts := buildah.BuilderOptions{
-		FromImage:    "scratch",
-		Capabilities: capabilitiesForRoot,
-	}
-
-	builder, err := buildah.NewBuilder(ctx, buildStore, builderOpts)
-	if err != nil {
-		panic(err)
-	} else {
-		klog.Infof("", "builder created", builder.Container)
-	}
 
 	newContainerCmd := exec.Command("/bin/sh", "-c", "sudo buildah from scratch")
 	// newContainerCmd := exec.Command("sudo", "buildah", "from", "scratch")
@@ -973,8 +933,8 @@ func tryBuildah(ctx context.Context, container Container) error {
 
 	// err = builder.Add(builder.ContainerID, false, buildah.AddAndCopyOptions{}, "checkpoint/"+container.ID+".tar")
 
-	klog.Infof("sudo buildah add " + builder.Container + " /home/ubuntu/live-migration-operator/checkpoint/" + container.ID + ".tar /")
-	addCheckpointCmd := exec.Command("/bin/sh", "-c", "sudo buildah add "+builder.Container+" /home/ubuntu/live-migration-operator/checkpoint/"+container.ID+".tar /")
+	klog.Infof("sudo buildah add " + newContainer + " /home/ubuntu/live-migration-operator/checkpoint/" + container.ID + ".tar /")
+	addCheckpointCmd := exec.Command("/bin/sh", "-c", "sudo buildah add "+newContainer+" /home/ubuntu/live-migration-operator/checkpoint/"+container.ID+".tar /")
 	// addCheckpointCmd := exec.Command("sudo", "buildah", "add", newContainer, "/home/ubuntu/live-migration-operator/checkpoint/"+container.ID+".tar")
 	err = addCheckpointCmd.Run()
 	if err != nil {
@@ -982,21 +942,18 @@ func tryBuildah(ctx context.Context, container Container) error {
 	}
 
 	klog.Infof("", "checkpoint added to container", container.Name)
-	configCheckpointCmd := exec.Command("/bin/sh", "-c", "sudo buildah config --annotation=io.kubernetes.cri-o.annotations.checkpoint.name="+container.Name+" "+builder.Container)
+	configCheckpointCmd := exec.Command("/bin/sh", "-c", "sudo buildah config --annotation=io.kubernetes.cri-o.annotations.checkpoint.name="+container.Name+" "+newContainer)
 	// configCheckpointCmd := exec.Command("sudo", "buildah", "config", "--annotation=io.kubernetes.cri-o.annotations.checkpoint.name="+container.Name, newContainer)
 	err = configCheckpointCmd.Run()
 	if err != nil {
 		return fmt.Errorf("failed to configure checkpoint annotation: %v", err)
 	}
 
-	imageRef, err := is.Transport.ParseStoreReference(buildStore, "leonardopoggiani/checkpoint-images:"+container.ID)
+	commitCheckpointCmd := exec.Command("/bin/sh", "-c", "sudo buildah commit "+newContainer+" leonardopoggiani/checkpoint-image:"+container.ID)
+	// commitCheckpointCmd := exec.Command("sudo", "buildah", "commit", newContainer, "localhost/checkpoint-image:"+container.ID)
+	err = commitCheckpointCmd.Run()
 	if err != nil {
-		panic(err)
-	}
-
-	imageId, _, _, err := builder.Commit(ctx, imageRef, buildah.CommitOptions{})
-	if err != nil {
-		panic(err)
+		return fmt.Errorf("failed to commit checkpoint image: %v", err)
 	}
 
 	pushCheckpointCmd := exec.Command("/bin/sh", "-c", "buildah push leonardopoggiani/checkpoint-images:"+container.ID+" docker.io/leonardopoggiani/checkpoint-images:"+container.ID)
@@ -1006,8 +963,6 @@ func tryBuildah(ctx context.Context, container Container) error {
 	} else {
 		klog.Infof("", "pushed image")
 	}
-
-	fmt.Printf("Try image built! %s\n", imageId)
 
 	return nil
 }
