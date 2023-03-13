@@ -730,6 +730,10 @@ func (r *LiveMigrationReconciler) restorePodCrio(podName string, namespace strin
 			return err
 		}
 
+	}
+
+	// first i create all the containers, then i wait for them to be ready
+	for _, container := range containers {
 		// Wait for the new container to become ready.
 		err = r.waitForContainerReady(podName, namespace, container.Name, clientset)
 		if err != nil {
@@ -1017,7 +1021,7 @@ func tryBuildah(ctx context.Context, container Container) error {
 		panic(err)
 	}
 
-	imageRef, err := is.Transport.ParseStoreReference(buildStore, "docker.io/leonardopoggiani/checkpoint-images:"+container.ID)
+	imageRef, err := is.Transport.ParseStoreReference(buildStore, "leonardopoggiani/checkpoint-images:"+container.ID)
 	if err != nil {
 		panic(err)
 	}
@@ -1027,10 +1031,12 @@ func tryBuildah(ctx context.Context, container Container) error {
 		panic(err)
 	}
 
-	pushCheckpointCmd := exec.Command("/bin/sh", "-c", "sudo buildah push docker.io/leonardopoggiani/checkpoint-images:"+container.ID+" docker.io/leonardopoggiani/checkpoint-images:"+container.ID)
+	pushCheckpointCmd := exec.Command("/bin/sh", "-c", "buildah push leonardopoggiani/checkpoint-images:"+container.ID+" leonardopoggiani/checkpoint-images:"+container.ID)
 	// pushCheckpointCmd := exec.Command("sudo", "buildah", "push", "localhost/checkpoint-image:"+container.ID, "leonardopoggiani/checkpoint-images:"+container.ID)
 	if err = pushCheckpointCmd.Run(); err != nil {
 		return fmt.Errorf("failed to push checkpoint image to container image registry: %v", err)
+	} else {
+		klog.Infof("", "pushed image")
 	}
 
 	fmt.Printf("Try image built! %s\n", imageId)
