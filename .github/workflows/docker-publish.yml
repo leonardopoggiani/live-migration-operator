@@ -34,7 +34,7 @@ jobs:
           sudo apt update
           sudo apt install -y libbtrfs-dev libdevmapper-dev libgpgme-dev
           go get github.com/containers/buildah
-          go build -o live-migration-operator .api/
+          go build -o live-migration-operator api-server/cmd/main.go
 
       - name: Build and push
         uses: docker/build-push-action@v4

@@ -284,7 +284,7 @@ func (r *LiveMigrationReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 			if err != nil {
 				klog.ErrorS(err, "unable to checkpoint", "container", container.Name, "ID", container.ID)
 			} else {
-				klog.Infof("", "checkpointPodCrio ok")
+				klog.Infof("", "checkpointPodCrio ok for "+container.Name)
 			}
 		}
 	}
@@ -636,8 +636,10 @@ func (r *LiveMigrationReconciler) updateAnnotations(ctx context.Context, pod *co
 
 func (r *LiveMigrationReconciler) checkpointPodCrio(containerID string) error {
 
-	if _, err := exec.Command("sudo", "rm", "-rf", "/home/ubuntu/live-migration-operator/checkpoint/*").Output(); err != nil {
+	if _, err := exec.Command("/bin/sh", "-c", "sudo rm -rf /home/ubuntu/live-migration-operator/checkpoint/*").CombinedOutput(); err != nil {
 		return err
+	} else {
+		klog.InfoS("deleted checkpoint folder")
 	}
 
 	checkpointCmd := exec.Command("/bin/sh", "-c", "crictl checkpoint --export=/home/ubuntu/live-migration-operator/checkpoint/"+containerID+".tar "+containerID)
