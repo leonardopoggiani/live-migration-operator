@@ -1,9 +1,10 @@
-package multi_container
+package main
 
 import (
 	"bytes"
-	"k8s.io/klog/v2"
 	"os/exec"
+
+	"k8s.io/klog/v2"
 )
 
 func main() {
@@ -22,7 +23,7 @@ func main() {
 	// err = builder.Add(builder.ContainerID, false, buildah.AddAndCopyOptions{}, "checkpoint/"+container.ID+".tar")
 
 	klog.Infof("\nsudo buildah add ", newContainer, " /home/ubuntu/live-migration-operator/checkpoint/f63284008ee741f22570680b542ffce6a6ce82ca15fa50d64cf537037d36078a.tar /")
-	//addCheckpointCmd := exec.Command("/bin/sh", "-c", "sudo buildah add "+newContainer+"/home/ubuntu/live-migration-operator/checkpoint/f63284008ee741f22570680b542ffce6a6ce82ca15fa50d64cf537037d36078a.tar /")
+	//addCheckpointCmd := exec.Command("/bin/sh", "-c", "sudo buildah add "+newContainer+"/home/ubuntu/live-migration-operator/checkpoint/f63284008ee741f22570680b542ffce6a6ce82ca15fa50d64cf537037d36078a.tar", "/")
 	addCheckpointCmd := exec.Command("sudo", "buildah", "add", newContainer, "/home/ubuntu/live-migration-operator/checkpoint/f63284008ee741f22570680b542ffce6a6ce82ca15fa50d64cf537037d36078a.tar")
 	klog.Infof(addCheckpointCmd.String())
 
