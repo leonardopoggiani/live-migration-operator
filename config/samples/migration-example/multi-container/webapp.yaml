@@ -9,6 +9,8 @@ kind: Pod
 metadata:
   name: multi-container-pod
   namespace: liqo-demo
+  annotations:
+    scheduler.alpha.kubernetes.io/node-selector: "kubernetes.io/hostname=poggiani-1-master"
 spec:
   containers:
     - name: web
@@ -34,4 +36,3 @@ spec:
   volumes:
     - name: db-data
       emptyDir: {}
-
