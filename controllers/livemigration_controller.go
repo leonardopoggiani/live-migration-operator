@@ -638,7 +638,7 @@ func (r *LiveMigrationReconciler) checkpointPodCrio(containerID string) error {
 
 	// Construct the cri-o checkpoint command.
 	checkpointCmd := exec.Command("/bin/sh", "-c", "sudo crictl checkpoint --export=/home/ubuntu/live-migration-operator/checkpoint/"+containerID+".tar "+containerID)
-
+	time.Sleep(10 * time.Second)
 	// Execute the checkpoint command.
 	output, err := checkpointCmd.CombinedOutput()
 	if err != nil {
@@ -647,8 +647,7 @@ func (r *LiveMigrationReconciler) checkpointPodCrio(containerID string) error {
 		klog.InfoS("checkpointed pod", "container", containerID, "output", string(output))
 	}
 
-	givePrivilege := exec.Command("/bin/sh", "-c", "sudo chmod 777 /home/ubuntu/live-migration-operator/checkpoint/"+containerID+".tar")
-	output, err = givePrivilege.CombinedOutput()
+	err = os.Chmod("/home/ubuntu/live-migration-operator/checkpoint/"+containerID+".tar", 0777)
 	if err != nil {
 		klog.ErrorS(err, "failed to give privilege", "container", containerID, "output", string(output))
 	} else {
