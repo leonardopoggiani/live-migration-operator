@@ -4,12 +4,10 @@ go 1.20
 
 require (
 	github.com/containers/buildah v1.29.1
-	github.com/containers/common v0.51.0
-	github.com/containers/image/v5 v5.24.2
 	github.com/containers/storage v1.45.4
 	github.com/emicklei/go-restful/v3 v3.10.2
 	github.com/onsi/ginkgo/v2 v2.9.1
-	github.com/onsi/gomega v1.27.3
+	github.com/onsi/gomega v1.27.4
 	k8s.io/api v0.26.2
 	k8s.io/apimachinery v0.26.2
 	k8s.io/client-go v0.26.2
@@ -35,6 +33,8 @@ require (
 	github.com/containerd/stargz-snapshotter/estargz v0.14.1 // indirect
 	github.com/containernetworking/cni v1.1.2 // indirect
 	github.com/containernetworking/plugins v1.2.0 // indirect
+	github.com/containers/common v0.51.0 // indirect
+	github.com/containers/image/v5 v5.24.2 // indirect
 	github.com/containers/libtrust v0.0.0-20230121012942-c1716e8a8d01 // indirect
 	github.com/containers/ocicrypt v1.1.7 // indirect
 	github.com/cyberphone/json-canonicalization v0.0.0-20220623050100-57a0ce2678a7 // indirect
@@ -71,6 +71,7 @@ require (
 	github.com/google/go-containerregistry v0.12.1 // indirect
 	github.com/google/go-intervals v0.0.2 // indirect
 	github.com/google/gofuzz v1.2.0 // indirect
+	github.com/google/pprof v0.0.0-20210407192527-94a9f03dee38 // indirect
 	github.com/google/uuid v1.3.0 // indirect
 	github.com/gorilla/mux v1.8.0 // indirect
 	github.com/hashicorp/errwrap v1.1.0 // indirect
