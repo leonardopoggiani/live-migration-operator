@@ -6,10 +6,9 @@ metadata:
 spec:
   containers:
     - name: web
-      image: docker.io/leonardopoggiani/checkpoint-images:e645780b6cb84fa37a0c2c4dfbce1ac4ad0e9fcea7c1700c7f210ed885e3609b
+      image: docker.io/leonardopoggiani/checkpoint-images:e645780b6cb84fa37a0c2c4dfbce1ac4ad0e9fcea7c1700c7f210ed885e3609bk
       imagePullPolicy: Always
       ports:
         - containerPort: 80
   nodeSelector:
     kubernetes.io/hostname: poggiani-1-master
-

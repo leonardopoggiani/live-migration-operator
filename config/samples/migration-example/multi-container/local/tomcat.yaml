@@ -1,0 +1,14 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: tomcat-pod
+  namespace: liqo-demo
+spec:
+  containers:
+    - name: tomcat
+      image: docker.io/tomcat:latest
+      imagePullPolicy: IfNotPresent
+      ports:
+        - containerPort: 8080
+  nodeSelector:
+    kubernetes.io/hostname: leonardo-controller
