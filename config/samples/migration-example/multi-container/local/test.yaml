@@ -5,10 +5,8 @@ metadata:
   namespace: liqo-demo
 spec:
   containers:
-    - name: web
-      image: docker.io/leonardopoggiani/checkpoint-images:e645780b6cb84fa37a0c2c4dfbce1ac4ad0e9fcea7c1700c7f210ed885e3609bk
+    - name: tomcat
+      image: docker.io/leonardopoggiani/checkpoint-images:tomcat-pod
       imagePullPolicy: Always
       ports:
-        - containerPort: 80
-  nodeSelector:
-    kubernetes.io/hostname: poggiani-1-master
+        - containerPort: 8080

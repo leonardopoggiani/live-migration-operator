@@ -7,7 +7,7 @@ spec:
   containers:
     - name: tomcat
       image: docker.io/tomcat:latest
-      imagePullPolicy: IfNotPresent
+      imagePullPolicy: Always
       ports:
         - containerPort: 8080
   nodeSelector:

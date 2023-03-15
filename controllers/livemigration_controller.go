@@ -266,7 +266,7 @@ func (r *LiveMigrationReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 		// Get the Kubernetes client configuration.
 
 		// Iterate over each pod and checkpoint each container.
-		// containers, err = PrintContainerIDs(clientset)
+		containers, err := PrintContainerIDs(clientset)
 		// if err != nil {
 		//	klog.ErrorS(err, "unable to print containerIDs")
 		//}
@@ -289,8 +289,11 @@ func (r *LiveMigrationReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 			klog.InfoS("deleted checkpoint folder")
 		}
 
-		os.Mkdir(pathToClear, 0777)
-		err = r.checkpointPodCrio()
+		err = os.Mkdir(pathToClear, 0777)
+		if err != nil {
+			return ctrl.Result{}, err
+		}
+		err = r.checkpointPodCrio(containers, req.Namespace, migratingPod.Name)
 		if err != nil {
 			klog.ErrorS(err, "unable to checkpoint")
 		}
@@ -416,34 +419,32 @@ func (r *LiveMigrationReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 		klog.ErrorS(err, "unable to read dir", "dir", dir)
 	}
 
-	if len(files) == 1 && !files[0].IsDir() {
-		klog.Infof("unique file found: %s", files[0].Name())
+	_, err = r.tryBuildah(ctx, pod, depl.Name, depl.Namespace, clientset, files, dir)
+	if err != nil {
+		klog.ErrorS(err, "unable to restore", "pod", migratingPod.Name, "destinationHost", migratingPod.Spec.DestHost)
 	} else {
-		klog.ErrorS(err, "unable to find checkpoint file", "dir", dir)
+		klog.Infof("pod restored")
 	}
 
-	checkpointPath := filepath.Join(dir, files[0].Name())
-	klog.Infof("checkpointPath: %s", checkpointPath)
 	// 	newPod, err := r.restorePod(ctx, pod, annotations["sourcePod"], checkpointPath)
 	// func (r *LiveMigrationReconciler) restorePodFinal(ctx context.Context, pod *corev1.Pod, podName string, namespace string, checkpointPath string, destinationHost string) (*corev1.Pod, error) {
 	// func tryBuildah(ctx context.Context, pod *corev1.Pod, podName string, clientset *kubernetes.Clientset, checkpointPath string) (*corev1.Pod, error) {
 
-	// newPod, err := tryBuildah(ctx, pod, clientset, checkpointPath)
-	newPod, err := r.restorePodFinal(ctx, pod, migratingPod.Name, annotations["sourcePod"], checkpointPath)
 	// err = r.restorePodCrio(migratingPod.Name, req.Namespace, containers, clientset, migratingPod.Spec.DestHost)
-	if err != nil {
-		klog.ErrorS(err, "unable to restore", "pod", migratingPod.Name, "destinationHost", migratingPod.Spec.DestHost)
-	}
 
-	for {
-		status, _ := r.checkPodExist(ctx, newPod.Name, req.Namespace)
-		if status != nil {
-			klog.Infof("", "Live-migration", "Step 4.1 - Check whether if newPod is Running or not - completed"+status.Name+string(status.Status.Phase))
-			break
-		} else {
-			time.Sleep(200 * time.Millisecond)
+	// newPod, err := r.restorePodFinal(ctx, pod, migratingPod.Name, annotations["sourcePod"], checkpointPath)
+
+	/*
+		for {
+			status, _ := r.checkPodExist(ctx, newPod.Name, req.Namespace)
+			if status != nil {
+				klog.Infof("", "Live-migration", "Step 4.1 - Check whether if newPod is Running or not - completed"+status.Name+string(status.Status.Phase))
+				break
+			} else {
+				time.Sleep(200 * time.Millisecond)
+			}
 		}
-	}
+	*/
 
 	klog.Infof("", "Live-migration", "Step 4 - Restore destPod from sourcePod's checkpointed info - completed")
 	// time.Sleep(5)
@@ -691,25 +692,29 @@ func (r *LiveMigrationReconciler) updateAnnotations(ctx context.Context, pod *co
 	return nil
 }
 
-func (r *LiveMigrationReconciler) checkpointPodCrio() error {
+func (r *LiveMigrationReconciler) checkpointPodCrio(containers []Container, namespace string, podName string) error {
 	// curl -sk -XPOST "https://localhost:10250/checkpoint/liqo-demo/tomcat-pod/tomcat"
 
-	curlPath := "https://localhost:10250/checkpoint/liqo-demo/tomcat-pod/tomcat"
-	checkpointCmd := exec.Command("curl", "-sk", "-XPOST", curlPath)
+	// for di curl per prendere tutti i container?
+	for _, container := range containers {
+		curlPath := "https://localhost:10250/checkpoint/" + namespace + "/" + podName + "/" + container.Name
+		checkpointCmd := exec.Command("curl", "-sk", "-XPOST", curlPath)
+
+		output, err := checkpointCmd.CombinedOutput()
+		if err != nil {
+			// klog.ErrorS(err, "failed to checkpoint container", "container", containerID, "output", string(output))
+			klog.ErrorS(err, "failed to checkpoint container", "output", string(output))
+		} else {
+			// klog.InfoS("checkpointed pod", "container", containerID, "output", string(output))
+			klog.InfoS("checkpointed pod", "output", string(output))
+		}
+	}
 
 	// exportPath := "/home/ubuntu/live-migration-operator/checkpoint/" + containerID + ".tar"
 	// exportPath := "/home/poggio/Documenti/GitHub/Pod-migration/live-migration-operator/checkpoint/" + containerID + ".tar"
 	// checkpointCmd := exec.Command("sudo", "crictl", "checkpoint", "--export", exportPath, containerID)
 	// checkpointCmd := exec.Command("/bin/sh", "-c", "crictl checkpoint --export=/home/ubuntu/live-migration-operator/checkpoint/"+containerID+".tar "+containerID)
 	// Execute the checkpoint command.
-	output, err := checkpointCmd.CombinedOutput()
-	if err != nil {
-		// klog.ErrorS(err, "failed to checkpoint container", "container", containerID, "output", string(output))
-		klog.ErrorS(err, "failed to checkpoint container", "output", string(output))
-	} else {
-		// klog.InfoS("checkpointed pod", "container", containerID, "output", string(output))
-		klog.InfoS("checkpointed pod", "output", string(output))
-	}
 
 	// err = os.Chmod("/home/ubuntu/live-migration-operator/checkpoint/"+containerID+".tar", 777)
 	/* err = os.Chmod("/home/poggio/Documenti/GitHub/Pod-migration/live-migration-operator/checkpoint/"+containerID+".tar", 777)
@@ -952,69 +957,125 @@ func waitForPodDeletion(ctx context.Context, podName string, clientset *kubernet
 	return fmt.Errorf("pod %s not found or already deleted", podName)
 }
 
-func tryBuildah(ctx context.Context, pod *corev1.Pod, clientset *kubernetes.Clientset, checkpointPath string) (*corev1.Pod, error) {
+func (r *LiveMigrationReconciler) tryBuildah(ctx context.Context, pod *corev1.Pod, podName string, namespace string, clientset *kubernetes.Clientset, files []os.DirEntry, dir string) (*corev1.Pod, error) {
 
-	newContainerCmd := exec.Command("sudo", "buildah", "from", "scratch")
-	newContainerOutput, err := newContainerCmd.Output()
-	if err != nil {
-		klog.ErrorS(err, "failed to create new container", "containerID", pod.Name)
-		return nil, err
+	var containersList []corev1.Container
+
+	for _, file := range files {
+		klog.Infof("file found: %s", file.Name())
+		checkpointPath := filepath.Join(dir, file.Name())
+		klog.Infof("checkpointPath: %s", checkpointPath)
+
+		newContainerCmd := exec.Command("sudo", "buildah", "from", "scratch")
+		newContainerOutput, err := newContainerCmd.Output()
+		if err != nil {
+			klog.ErrorS(err, "failed to create new container", "containerID", podName)
+			return nil, err
+		}
+		newContainerOutput = bytes.TrimRight(newContainerOutput, "\n") // remove trailing newline
+		newContainer := string(newContainerOutput)
+
+		klog.Infof("", "new container name", newContainer)
+		// checkpointPath := "/home/ubuntu/live-migration-operator/checkpoint/" + container.ID + ".tar"
+		addCheckpointCmd := exec.Command("sudo", "buildah", "add", newContainer, checkpointPath, "/")
+		klog.Infof(addCheckpointCmd.String())
+
+		out, err := addCheckpointCmd.CombinedOutput()
+		if err != nil {
+			klog.ErrorS(err, "failed to add checkpoint to container")
+			return nil, err
+		} else {
+			klog.Infof("Checkpoint added to container", string(out))
+		}
+
+		// split the string by "-"
+		parts := strings.Split(checkpointPath, "-")
+
+		// iterate over the parts in reverse order
+		var containerName string
+
+		for i := len(parts) - 1; i >= 0; i-- {
+			part := parts[i]
+
+			// check if the part is a valid date/time
+			if part == "2023" {
+				// the previous part is the container name
+				if i > 0 {
+					containerName = parts[i-1]
+				} else {
+					break
+				}
+			}
+		}
+
+		annotation := "--annotation=io.kubernetes.cri-o.annotations.checkpoint.name=" + containerName
+		klog.Infof("", "annotation", annotation)
+
+		configCheckpointCmd := exec.Command("sudo", "buildah", "config", annotation, newContainer)
+		out, err = configCheckpointCmd.CombinedOutput()
+		if err != nil {
+			klog.ErrorS(err, "failed to add checkpoint to container")
+			return nil, err
+		} else {
+			klog.Infof("Checkpoint added to container", string(out))
+		}
+
+		localCheckpointPath := "leonardopoggiani/checkpoint-images:" + containerName
+		klog.Infof("", "localCheckpointPath", localCheckpointPath)
+		commitCheckpointCmd := exec.Command("sudo", "buildah", "commit", newContainer, localCheckpointPath)
+		out, err = commitCheckpointCmd.CombinedOutput()
+		if err != nil {
+			klog.ErrorS(err, "failed to commit checkpoint")
+			klog.Infof("out: %s", out)
+		}
+
+		authFile := "/run/user/1000/containers/auth.json"
+		localCheckpointPath = "localhost/" + localCheckpointPath
+		remoteCheckpointPath := "docker-daemon://docker.io/leonardopoggiani/checkpoint-images:" + containerName
+		pushCheckpointCmd := exec.Command("sudo", "buildah", "push", "--authfile", authFile, localCheckpointPath, remoteCheckpointPath)
+		klog.Infof(pushCheckpointCmd.String())
+		if err = pushCheckpointCmd.Run(); err != nil {
+			klog.ErrorS(err, "failed to push checkpoint")
+		} else {
+			klog.Infof("", "pushed image")
+		}
+
+		klog.Infof("", "newPod", podName)
+
+		addContainer := corev1.Container{
+			Name:  containerName,
+			Image: "docker.io/leonardopoggiani/checkpoint-images:" + containerName,
+		}
+
+		containersList = append(containersList, addContainer)
+		pod.ObjectMeta.Annotations["snapshotPath"] = checkpointPath
+
 	}
-	newContainerOutput = bytes.TrimRight(newContainerOutput, "\n") // remove trailing newline
-	newContainer := string(newContainerOutput)
 
-	klog.Infof("", "new container name", newContainer)
-	// checkpointPath := "/home/ubuntu/live-migration-operator/checkpoint/" + container.ID + ".tar"
-	addCheckpointCmd := exec.Command("sudo", "buildah", "add", newContainer, checkpointPath)
-	klog.Infof(addCheckpointCmd.String())
+	klog.Infof("", "pod", podName)
+	klog.Infof("", "containersList", containersList)
 
-	out, err := addCheckpointCmd.CombinedOutput()
-	if err != nil {
-		klog.ErrorS(err, "failed to add checkpoint to container")
-		klog.Infof("out: %s", out)
-	}
+	pod.Name = podName
+	pod.Namespace = namespace
+	// pod.Spec.Containers = containersList
 
-	localCheckpointPath := "leonardopoggiani/checkpoint-images:" + pod.Name
-	klog.Infof("", "localCheckpointPath", localCheckpointPath)
-	commitCheckpointCmd := exec.Command("sudo", "buildah", "commit", newContainer, localCheckpointPath)
-	out, err = commitCheckpointCmd.CombinedOutput()
-	if err != nil {
-		klog.ErrorS(err, "failed to commit checkpoint")
-		klog.Infof("out: %s", out)
-	}
+	pod.ObjectMeta.Annotations["snapshotPolicy"] = "restore"
+	// pod.ObjectMeta.Annotations["snapshotPath"] = checkpointPath
 
-	authFile := "/run/user/1000/containers/auth.json"
-	localCheckpointPath = "localhost/" + localCheckpointPath
-	remoteCheckpointPath := "docker://docker.io/leonardopoggiani/checkpoint-images:" + pod.Name
-	pushCheckpointCmd := exec.Command("sudo", "buildah", "push", "--authfile", authFile, localCheckpointPath, remoteCheckpointPath)
-	klog.Infof(pushCheckpointCmd.String())
-	if err = pushCheckpointCmd.Run(); err != nil {
-		klog.ErrorS(err, "failed to push checkpoint")
+	if err := r.Create(ctx, pod); err != nil {
+		klog.ErrorS(err, "failed to create restored pod", "podName", podName, "namespace", namespace)
 	} else {
-		klog.Infof("", "pushed image")
+		klog.InfoS("restored pod", "podName", podName, "namespace", namespace)
 	}
 
-	// create a new Pod definition with an image from docker.io
-	newPod := &corev1.Pod{
-		ObjectMeta: metav1.ObjectMeta{
-			Name: pod.Name,
-		},
-		Spec: corev1.PodSpec{
-			Containers: []corev1.Container{
-				{
-					Name:  pod.Name,
-					Image: "docker.io/leonardopoggiani/checkpoint-images:" + pod.Name,
-				},
-			},
-		},
-	}
-
-	// create the Pod in Kubernetes
-	_, err = clientset.CoreV1().Pods("default").Create(context.Background(), pod, metav1.CreateOptions{})
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Failed to create Pod: %v\n", err)
-		os.Exit(1)
-	}
-
-	return newPod, nil
+	/*
+		_, err := clientset.CoreV1().Pods("liqo-demo").Create(context.Background(), pod, metav1.CreateOptions{})
+		if err != nil {
+			klog.ErrorS(err, "unable to create pod", "pod", podName)
+			return nil, err
+		} else {
+			klog.Info("pod created ", podName)
+		}
+	*/
+	return pod, nil
 }
