@@ -7,8 +7,6 @@ spec:
   containers:
     - name: tomcat
       image: docker.io/tomcat:latest
-      imagePullPolicy: Always
+      imagePullPolicy: IfNotPresent
       ports:
         - containerPort: 8080
-  nodeSelector:
-    kubernetes.io/hostname: leonardo-controller
