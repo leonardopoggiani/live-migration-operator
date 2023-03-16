@@ -6,8 +6,8 @@ metadata:
 spec:
   containers:
     - name: tomcat
-      image: docker.io/leonardopoggiani/checkpoint-images:tomcat
-      imagePullPolicy: IfNotPresent
+      image: docker.io/tomcat:latest
+      imagePullPolicy: Always
       ports:
         - containerPort: 8080
   nodeSelector:
