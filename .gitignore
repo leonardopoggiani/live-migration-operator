@@ -27,6 +27,6 @@ deployments
 hack
 *.txt
 
-checkpoint
-checkpoint/*
+checkpoints
+checkpoints/*
 *.log
