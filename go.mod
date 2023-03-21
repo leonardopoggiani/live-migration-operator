@@ -8,9 +8,9 @@ require (
 	github.com/emicklei/go-restful/v3 v3.10.2
 	github.com/onsi/ginkgo/v2 v2.9.1
 	github.com/onsi/gomega v1.27.4
-	k8s.io/api v0.26.3
+	k8s.io/api v0.26.2
 	k8s.io/apimachinery v0.26.3
-	k8s.io/client-go v0.26.3
+	k8s.io/client-go v0.26.2
 	k8s.io/klog/v2 v2.90.1
 	sigs.k8s.io/controller-runtime v0.14.5
 )
