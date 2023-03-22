@@ -52,16 +52,6 @@ jobs:
           username: ${{ github.repository_owner }}
           password: ${{ secrets.GHCR_TOKEN }}
 
-      - name: Show Working Directory
-        run: |
-          pwd
-
-      - name: List files in working directory
-        run: ls -la
-
-      - name: Go mod init
-        run: go mod init live-migration-operator
-
       - name: Go env
         run: go env GOPRIVATE=github.com/leonardopoggiani/live-migration-operator
 

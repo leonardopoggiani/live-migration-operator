@@ -30,6 +30,3 @@ hack
 checkpoints
 checkpoints/*
 *.log
-
-go.mod
-go.sum
