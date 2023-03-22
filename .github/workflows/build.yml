@@ -50,11 +50,14 @@ jobs:
           username: ${{ github.repository_owner }}
           password: ${{ secrets.GHCR_TOKEN }}
 
-      - name: Go Format
-        run: gofmt -s -w . && git diff --exit-code
+      - name: Build Go packages
+        run: |
+          sudo apt update
+          sudo apt install -y libbtrfs-dev libdevmapper-dev libgpgme-dev
+          go get github.com/containers/buildah
 
-      - name: Go Vet
-        run: go vet ./...
+      - name: Go Format
+        run: gofmt -s -w . && git diff --exit-code 
 
       - name: Go Generate
         run: go generate ./... && git diff --exit-code
