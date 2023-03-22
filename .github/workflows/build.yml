@@ -64,12 +64,6 @@ jobs:
       - name: Go mod init
         run: go mod init live-migration-operator
 
-      - name: Go Format
-        run: gofmt -s -w . && git diff --exit-code
-
-      - name: Go Vet
-        run: go vet ./...
-
       - name: Go Tidy
         run: go mod tidy && git diff --exit-code
 
@@ -78,6 +72,12 @@ jobs:
 
       - name: Go Mod Verify
         run: go mod verify
+
+      - name: Go Format
+        run: gofmt -s -w . && git diff --exit-code
+
+      - name: Go Vet
+        run: go vet ./...
 
       - name: Go Generate
         run: go generate ./... && git diff --exit-code
