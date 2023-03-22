@@ -61,6 +61,9 @@ jobs:
       - name: List files in working directory
         run: ls -la
 
+      - name: Go mod init
+        run: go mod init live-migration-operator
+
       - name: Go Format
         run: gofmt -s -w . && git diff --exit-code
 
