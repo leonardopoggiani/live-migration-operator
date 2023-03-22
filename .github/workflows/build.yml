@@ -36,6 +36,10 @@ jobs:
     steps:
       - name: Check out code
         uses: actions/checkout@v3
+        with:
+          repository: leonardopoggiani/live-migration-operator
+          token: ${{ secrets.GHCR_TOKEN }}
+          ref: main
 
       - name: Install Go
         uses: actions/setup-go@v4
