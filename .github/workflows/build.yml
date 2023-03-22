@@ -17,6 +17,12 @@ on:
         required: false
         type: boolean
 
+env:
+  DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
+  DOCKER_PASSWORD: ${{ secrets.DOCKER_PASSWORD }}
+  GHCR_USERNAME: ${{ secrets.GHCR_USERNAME }}
+  GHCR_TOKEN: ${{ secrets.GHCR_TOKEN }}
+
 jobs:
   run:
     name: Build
@@ -36,6 +42,13 @@ jobs:
         with:
           go-version: ${{ matrix.go }}
           check-latest: true
+
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v2
+        with:
+          registry: ghcr.io
+          username: ${{ github.repository_owner }}
+          password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Go Format
         run: gofmt -s -w . && git diff --exit-code
