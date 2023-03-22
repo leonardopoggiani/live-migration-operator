@@ -14,7 +14,6 @@ import (
 	"k8s.io/client-go/rest"
 	"sigs.k8s.io/controller-runtime/pkg/cache"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
 )
 
 var (
@@ -44,39 +43,6 @@ type manager struct {
 	errSignal       *errSignaler
 	port            int
 	allowedDomains  []string
-}
-
-func NewManager(config *rest.Config, options Options) (Manager, error) {
-	mapper, err := apiutil.NewDynamicRESTMapper(config)
-	if err != nil {
-		return nil, err
-	}
-
-	cc, err := cache.New(config, cache.Options{
-		Scheme:    options.Scheme,
-		Mapper:    mapper,
-		Resync:    &defaultRetryPeriod,
-		Namespace: options.Namespace,
-	})
-	if err != nil {
-		return nil, err
-	}
-
-	c, err := client.New(config, client.Options{Scheme: options.Scheme, Mapper: mapper})
-	if err != nil {
-		return nil, err
-	}
-
-	stop := make(chan struct{})
-	return &manager{
-		config:          config,
-		cache:           cc,
-		client:          c,
-		internalStop:    stop,
-		internalStopper: stop,
-		port:            options.Port,
-		allowedDomains:  options.AllowedDomains,
-	}, nil
 }
 
 func (m *manager) Start(stop <-chan struct{}) error {

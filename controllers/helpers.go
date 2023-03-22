@@ -110,11 +110,3 @@ func getPodsPrefix(controllerName string) string {
 	// }
 	return prefix
 }
-
-// RemoveString removes the element at position i from a string array without preserving
-// the order.
-// https://stackoverflow.com/a/37335777/4430124
-func RemoveString(s []string, i int) []string {
-	s[i] = s[len(s)-1]
-	return s[:len(s)-1]
-}

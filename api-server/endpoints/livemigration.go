@@ -30,10 +30,6 @@ func (pe *LivemigrationEndpoint) SetupWithWS(ws *restful.WebService) {
 		Returns(400, "Bad Request", nil))
 }
 
-func NewLivemigrationEndpoint(client client.Client) *LivemigrationEndpoint {
-	return &LivemigrationEndpoint{client: client}
-}
-
 func (pe *LivemigrationEndpoint) list(request *restful.Request, response *restful.Response) {
 	dl := new(v1.LiveMigrationList)
 	err := pe.client.List(request.Request.Context(), dl, &client.ListOptions{})
