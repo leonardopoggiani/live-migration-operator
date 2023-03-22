@@ -10,3 +10,13 @@ repos:
       - id: check-yaml
       - id: requirements-txt-fixer
       - id: trailing-whitespace
+
+  - repo: local
+    hooks:
+      - id: build-go
+        name: Build Go file
+        entry: go build -o live-migration-operator api-server/cmd/main.go
+        language: system
+        types: [file]
+        files: '\.go$'
+        stages: [commit]

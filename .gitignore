@@ -32,3 +32,5 @@ checkpoints/*
 *.log
 checkpoint
 checkpoint/*
+
+logs/
