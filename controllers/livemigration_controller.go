@@ -135,13 +135,7 @@ func (r *LiveMigrationReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 			klog.ErrorS(err, "sourcePod not exist", "pod", annotations["sourcePod"])
 			return ctrl.Result{}, err
 		}
-		/*
-			if err := r.removeCheckpointPod(ctx, sourcePod, "/var/lib/kubelet/migration/", "", req.Namespace); err != nil {
-				klog.ErrorS(err, "unable to remove checkpoint", "pod", sourcePod)
-				return ctrl.Result{}, err
-			}
 
-		*/
 		klog.Infof("", "Live-migration", "Step 1 - Check source pod is exist or not - completed")
 		klog.Infof("", "sourcePod status ", sourcePod.Status.Phase)
 
@@ -154,8 +148,7 @@ func (r *LiveMigrationReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 		} else {
 			klog.InfoS("changed checkpoint folder permission")
 		}
-		// pathToClear := "/home/poggio/Documenti/GitHub/Pod-migration/live-migration-operator/checkpoint/*"
-		// pathToClear := "/home/ubuntu/live-migration-operator/checkpoint/*"
+
 		if _, err = exec.Command("sudo", "rm", "-rf", pathToClear).CombinedOutput(); err != nil {
 			klog.ErrorS(err, "unable to delete checkpoint folder")
 		} else {
@@ -340,7 +333,7 @@ func (r *LiveMigrationReconciler) getSourcePodTemplate(ctx context.Context, sour
 	if sourcePod == nil {
 		return nil, err
 	}
-	//(TODO: TuongVX): Get template of pod with multiple containers
+
 	pod := sourcePod.DeepCopy()
 	container := pod.Spec.Containers[0]
 	template := &corev1.PodTemplateSpec{
@@ -640,8 +633,6 @@ func (r *LiveMigrationReconciler) buildahCheckpointRestore(ctx context.Context, 
 		}
 
 		containersList = append(containersList, addContainer)
-		pod.ObjectMeta.Annotations["snapshotPath"] = checkpointPath
-
 	}
 
 	klog.Infof("", "pod", podName)
@@ -649,10 +640,9 @@ func (r *LiveMigrationReconciler) buildahCheckpointRestore(ctx context.Context, 
 
 	pod.Name = podName
 	pod.Namespace = namespace
-	// pod.Spec.Containers = containersList
+	pod.Spec.Containers = containersList
 
 	pod.ObjectMeta.Annotations["snapshotPolicy"] = "restore"
-	// pod.ObjectMeta.Annotations["snapshotPath"] = checkpointPath
 
 	if err := r.Create(ctx, pod); err != nil {
 		klog.ErrorS(err, "failed to create restored pod", "podName", podName, "namespace", namespace)
