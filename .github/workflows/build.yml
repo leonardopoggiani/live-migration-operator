@@ -20,6 +20,8 @@ on:
 env:
   GHCR_USERNAME: ${{ secrets.GHCR_USERNAME }}
   GHCR_TOKEN: ${{ secrets.GHCR_TOKEN }}
+  GH_TOKEN: ${{ secrets.GH_TOKEN }}
+
 
 jobs:
   run:
@@ -31,11 +33,11 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3
         with:
           repository: ${{ github.repository }}
           ref: ${{ github.ref }}
-          token: ${{ secrets.GHCR_TOKEN }}
+          token: ${{ secrets.GH_TOKEN }}
 
       - name: Install Go
         uses: actions/setup-go@v4
