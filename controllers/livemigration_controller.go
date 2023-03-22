@@ -22,7 +22,6 @@ import (
 	"fmt"
 	api "github.com/leonardopoggiani/live-migration-operator/api/v1alpha1"
 	appsv1 "k8s.io/api/apps/v1"
-	core "k8s.io/api/core/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -30,13 +29,11 @@ import (
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/clientcmd"
 	"k8s.io/klog/v2"
-	"math/rand"
 	"os"
 	"os/exec"
 	"path/filepath"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"strconv"
 	"strings"
 	"time"
 )
@@ -56,7 +53,7 @@ func (r *LiveMigrationReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 	klog.Infof("Reconciling LiveMigration %s", req.Name)
 
 	// Load Kubernetes config
-	kubeconfig, err := clientcmd.BuildConfigFromFlags("", "/home/poggio/.kube/config")
+	kubeconfig, err := clientcmd.BuildConfigFromFlags("", "/home/ubuntu/.kube/config")
 	// kubeconfig, err := clientcmd.BuildConfigFromFlags("", "/home/ubuntu/.kube/config")
 	if err != nil {
 		klog.ErrorS(err, "failed to load Kubernetes config")
@@ -67,109 +64,6 @@ func (r *LiveMigrationReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 	if err != nil {
 		klog.ErrorS(err, "failed to create Kubernetes client")
 	}
-
-	/* TODO: initialize containerd/crio env*/
-	/* first may need to test the migration with default options using a node that is not the virtual-kubelet node
-	(there may be the taint (noSchedule) that complicate things). Then try to understand how migration works originally
-	(they used a migration with containerd or something else? it seems that it's not in the GO code)
-	Then I can try different migrations supports like CRIO or Containerd one.
-	*/
-
-	// ******* CONTAINERD ******* //
-	/*
-		c, err := containerd.New("/run/containerd/containerd.sock")
-		if err != nil {
-			klog.Errorf("ERR: %s", err)
-		}
-		klog.Infof("opened containerd client", "client", c)
-
-		defer c.Close()
-
-		// create a context for docker
-		ctx = context.Background()
-		ctx = namespaces.WithNamespace(ctx, "my-namespace")
-
-		klog.Infof("created namespace", "namespace", ctx)
-
-		// pull an image and unpack it into the configured snapshotter
-		image, err := c.Pull(ctx, "docker.io/library/redis:latest", containerd.WithPullUnpack)
-		if err != nil {
-			klog.Errorf("ERR: %s", err)
-		}
-		klog.Infof("pulled image", "image", image)
-
-		// allocate a new RW root filesystem for a container based on the image
-		redis, err := c.NewContainer(ctx, "redis-master",
-			containerd.WithNewSnapshot("redis-rootfs", image),
-			containerd.WithNewSpec(oci.WithImageConfig(image)),
-		)
-		if err != nil {
-			klog.Errorf("ERR %s", err)
-		}
-
-		// create a new task
-		task, err := redis.NewTask(ctx, cio.NewCreator(cio.WithStdio))
-		defer task.Delete(ctx)
-		if err != nil {
-			klog.Errorf("ERR %s", err)
-		}
-
-		// the task is now running and has a pid that can be used to setup networking
-		// or other runtime settings outside containerd
-		pid := task.Pid()
-		klog.Infof("redis-master running as pid %d", pid)
-
-		// start the redis-server process inside the container
-		err = task.Start(ctx)
-		klog.ErrorS(err, "start task")
-
-		// wait for the task to exit and get the exit status
-		status, err := task.Wait(ctx)
-		klog.Infof("status task %s", status)
-
-		// checkpoint the task then push it to a registry
-		checkpoint, err := task.Checkpoint(ctx)
-		klog.ErrorS(err, "checkpoint error")
-
-		// push the image to the registry using the descriptor
-		err = c.Push(ctx, "myregistry/checkpoints/redis:master", checkpoint.Target())
-		if err != nil {
-			// handle error
-		}
-
-		// on a new machine pull the checkpoint and restore the redis container
-		checkpoint, err = c.Pull(ctx, "myregistry/checkpoints/redis:master")
-
-		redis, err = c.NewContainer(ctx, "redis-master", containerd.WithNewSnapshot("redis-rootfs", checkpoint))
-		defer redis.Delete(ctx)
-
-		task, err = redis.NewTask(ctx, cio.NewCreator(cio.WithStdio), containerd.WithTaskCheckpoint(checkpoint))
-		defer task.Delete(ctx)
-
-		err = task.Start(ctx)
-
-
-	*/
-	/*
-		// node1
-		checkpoint, err := container.Checkpoint(ctx, ref, containerd.WithTaskState)
-
-		client.Push(ctx, ref, checkpoint.Target())
-
-		// node2
-		checkpoint, err := client.Pull(ctx, ref)
-
-		container, err := client.NewContainer(ctx, id)
-		container.Restore(ctx, checkpoint)
-
-		task, err := container.NewTask(ctx, nil, containerd.WithCheckpoint(checkpoint))
-	*/
-	// ******* CRIO ******* //
-	/*
-		c, err := crio.New("/run/crio/crio.sock")
-	*/
-
-	// ******* original ******* //
 
 	// Load the LiveMigration resource object, if there is no Object, return directly
 	var migratingPod api.LiveMigration
@@ -250,31 +144,10 @@ func (r *LiveMigrationReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 		*/
 		klog.Infof("", "Live-migration", "Step 1 - Check source pod is exist or not - completed")
 		klog.Infof("", "sourcePod status ", sourcePod.Status.Phase)
-		// Step2: checkpoint sourcePod
-		// copySourcePod := sourcePod.DeepCopy()
 
-		/* TODO: checkpoint sourcePod */
-		// for every container inside a pod
-		/*
-			It may be an option to make a checkpoint of every container separetely or another option may be to compress all
-			the images inside one. May need to investigate the performance of the two proposal.
-			And if i do the checkpoints concurrently?
-		*/
-
-		// ******* CRI-O ******* //
-		// Get all running pods in the default namespace.
-		// Get the Kubernetes client configuration.
-
-		// Iterate over each pod and checkpoint each container.
 		containers, err := PrintContainerIDs(clientset)
-		// if err != nil {
-		//	klog.ErrorS(err, "unable to print containerIDs")
-		//}
-
-		// if _, err := exec.Command("/bin/sh", "-c", "sudo rm -rf /home/ubuntu/live-migration-operator/checkpoint/*").CombinedOutput(); err != nil {
-		// if _, err := exec.Command("/bin/sh", "-c", "sudo rm -rf /home/poggio/Documenti/GitHub/Pod-migration/live-migration-operator/checkpoint/*").CombinedOutput(); err != nil {
-
 		pathToClear := "/var/lib/kubelet/checkpoints/"
+
 		err = os.Chmod(pathToClear, 0777)
 		if err != nil {
 			klog.ErrorS(err, "unable to change checkpoint folder permission")
@@ -297,90 +170,10 @@ func (r *LiveMigrationReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 		if err != nil {
 			klog.ErrorS(err, "unable to checkpoint")
 		}
-
-		/*
-			for _, container := range containers {
-
-				// TODO: Check if the container is running.
-
-				// Checkpoint the container.
-				err := r.checkpointPodCrio(container.ID)
-
-				if err != nil {
-					klog.ErrorS(err, "unable to checkpoint", "container", container.Name, "ID", container.ID)
-				} else {
-					klog.Infof("", "checkpointPodCrio ok for "+container.Name)
-				}
-			}
-
-		*/
 	}
 
-	/*
-		err = r.checkpointPodContainerd(ctx, sourcePod, "/var/lib/kubelet/migration/")
-		if err != nil {
-			return ctrl.Result{}, err
-		} else {
-			klog.Infof("", "checkpointPodCriu ok")
-		}
-
-		if err := r.checkpointPod(ctx, sourcePod, ""); err != nil {
-			klog.ErrorS(err, "unable to checkpoint", "pod", sourcePod)
-			return ctrl.Result{}, err
-		}
-	*/
-
 	klog.Infof("", "Live-migration", "Step 2 - checkpoint source Pod - completed")
-	// TODO(TUONG): make migrate all container inside Pod
-	// for container := range copySourcePod.Spec.Containers {
-	// 	fmt.Println(copySourcePod.Spec.Containers[container].Name)
-	// 	klog.Infof("", "container of pod", copySourcePod.Spec.Containers[container].Name)
-	// }
 
-	// at this moment just loop the containers inside a pod, later it must checkpoint and restore every container
-	// inside the pod.
-	// for container := range sourcePod.Spec.Containers {
-	//	klog.Infof("", "container --> ", sourcePod.Spec.Containers[container].Name)
-	//}
-
-	// Step3: wait until checkpoint info are created
-	//container := sourcePod.Spec.Containers[0].Name // = web
-	// multi-containers: [ web | db ]
-
-	// change the path to check, may no be anymore this one may also need to understand how checkpoint is done now
-	/*
-		klog.Infof("", "checkpointPath: ", checkpointPath)                         // = /var/lib/kubelet/migration/multi-container-pod
-
-			for {
-				klog.Infof("looping waiting on file %s", path.Join(checkpointPath, container, "descriptors.json"))
-
-				// why this file and this path?
-				_, err := os.Stat(path.Join(checkpointPath, container, "descriptors.json"))
-				if os.IsNotExist(err) {
-					time.Sleep(100 * time.Millisecond)
-				} else {
-					break
-				}
-			}
-
-	*/
-
-	// klog.Infof("", "Live-migration", "checkpointPath"+checkpointPath)
-	// klog.Infof("", "Live-migration", "Step 3 - Wait until checkpoint info are created - completed")
-	// time.Sleep(10)
-	// Step4: restore destPod from sourcePod checkpoted info
-	// newPod, err := r.restorePod(ctx, pod, annotations["sourcePod"], checkpointPath)
-	/*
-		if err != nil {
-			klog.ErrorS(err, "unable to restore", "pod", sourcePod)
-			return ctrl.Result{}, err
-		}
-
-	*/
-
-	// func (r *LiveMigrationReconciler) restorePodCrio(podName string, namespace string, containerName string, checkpointImage string, clientset *kubernetes.Clientset)
-
-	// first I need to terminate the checkpointed pod
 	err = r.terminateCheckpointedPod(ctx, migratingPod.Name, clientset)
 	if err != nil {
 		klog.ErrorS(err, "unable to terminate checkpointed pod", "pod", migratingPod.Name)
@@ -388,78 +181,31 @@ func (r *LiveMigrationReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 		klog.Infof("checkpointed pod terminated")
 	}
 
-	// TODO: for every container i previously checkpointed, i need to restore it.
-	// what i have to use on the checkpointImage?
-	// building image with buildah
-
-	/*for _, container := range containers {
-		klog.Infof("containerID: %s", container.ID)
-		err := tryBuildah(ctx, container)
-		if err != nil {
-			klog.ErrorS(err, "unable to build image", "container", container.Name, "ID", container.ID)
-		}
-		// buildImageSkopeo(container.ID)
-	}*/
-
-	/*
-		err = createCheckpointImage(containers)
-		err = buildahCheckpointImage(ctx, containers)
-		if err != nil {
-			klog.ErrorS(err, "unable to create checkpoint image", "pod", migratingPod.Name)
-		} else {
-			klog.Infof("checkpoint image created")
-		}
-	*/
-	// func (r *LiveMigrationReconciler) restorePodFinal(ctx context.Context, podName string, namespace string, snapshotPath string, clientset *kubernetes.Clientset, destinationHost string) error {
-
-	// /var/lib/kubelet/checkpoints/checkpoint-tomcat-pod_liqo-demo-tomcat-2023-03-14T20:53:47+01:00.tar"
 	dir := "/var/lib/kubelet/checkpoints/"
 	files, err := os.ReadDir(dir)
 	if err != nil {
 		klog.ErrorS(err, "unable to read dir", "dir", dir)
 	}
 
-	_, err = r.tryBuildah(ctx, pod, depl.Name, depl.Namespace, clientset, files, dir)
+	_, err = r.buildahCheckpointRestore(ctx, pod, depl.Name, depl.Namespace, files, dir)
 	if err != nil {
 		klog.ErrorS(err, "unable to restore", "pod", migratingPod.Name, "destinationHost", migratingPod.Spec.DestHost)
 	} else {
 		klog.Infof("pod restored")
 	}
 
-	// 	newPod, err := r.restorePod(ctx, pod, annotations["sourcePod"], checkpointPath)
-	// func (r *LiveMigrationReconciler) restorePodFinal(ctx context.Context, pod *corev1.Pod, podName string, namespace string, checkpointPath string, destinationHost string) (*corev1.Pod, error) {
-	// func tryBuildah(ctx context.Context, pod *corev1.Pod, podName string, clientset *kubernetes.Clientset, checkpointPath string) (*corev1.Pod, error) {
-
-	// err = r.restorePodCrio(migratingPod.Name, req.Namespace, containers, clientset, migratingPod.Spec.DestHost)
-
-	// newPod, err := r.restorePodFinal(ctx, pod, migratingPod.Name, annotations["sourcePod"], checkpointPath)
-
-	/*
-		for {
-			status, _ := r.checkPodExist(ctx, newPod.Name, req.Namespace)
-			if status != nil {
-				klog.Infof("", "Live-migration", "Step 4.1 - Check whether if newPod is Running or not - completed"+status.Name+string(status.Status.Phase))
-				break
-			} else {
-				time.Sleep(200 * time.Millisecond)
-			}
-		}
-	*/
-
 	klog.Infof("", "Live-migration", "Step 4 - Restore destPod from sourcePod's checkpointed info - completed")
-	// time.Sleep(5)
-	/*
-		for {
-			status, _ := r.checkPodExist(ctx, newPod.Name, req.Namespace)
-			if status != nil {
-				klog.Infof("", "Live-migration", "Step 4.1 - Check whether if newPod is Running or not - completed"+status.Name+string(status.Status.Phase))
-				break
-			} else {
-				time.Sleep(200 * time.Millisecond)
-			}
-		}
 
-	*/
+	for {
+		status, _ := r.checkPodExist(ctx, depl.Name, req.Namespace)
+		if status != nil {
+			klog.Infof("", "Live-migration", "Step 4.1 - Check whether if newPod is Running or not - completed"+status.Name+string(status.Status.Phase))
+			break
+		} else {
+			time.Sleep(200 * time.Millisecond)
+		}
+	}
+
 	klog.Infof("", "Live-migration", "Step 4.1 - Check whether if newPod is Running or not - completed")
 	// Step5: Clean checkpointpod process and checkpointPath
 	// if err := r.removeCheckpointPod(ctx, sourcePod, "/var/lib/kubelet/migration/", newPod.Name, req.Namespace); err != nil {
@@ -573,43 +319,6 @@ func (r *LiveMigrationReconciler) deletePod(ctx context.Context, pod *corev1.Pod
 	return nil
 }
 
-func (r *LiveMigrationReconciler) checkpointPod(ctx context.Context, pod *corev1.Pod, snapshotPath string) error {
-	snapshotPolicy := "checkpoint"
-
-	if snapshotPath == "" {
-		snapshotPath = "/var/lib/kubelet/migration/multi-container-pod"
-	}
-	// not sure but to investigate:
-	/*
-		updating the annotations for the given pod triggers a Reconciler somewhere that check the pod, see the new annotation
-		and perform the checkpoint?
-	*/
-	klog.Infof("", "checkpointPod", "pod", pod.Name, "snapshotPath", snapshotPath)
-
-	if err := r.updateAnnotations(ctx, pod, snapshotPolicy, snapshotPath); err != nil {
-		return err
-	}
-	return nil
-}
-
-func (r *LiveMigrationReconciler) restorePod(ctx context.Context, pod *corev1.Pod, sourcePod, checkpointPath string) (*corev1.Pod, error) {
-	// targetPod := pod.DeepCopy()
-	// targetPod.Finalizers = append(targetPod.Finalizers, migratingPodFinalizer)
-	s1 := rand.NewSource(time.Now().UnixNano())
-	number := rand.New(s1)
-	// why bring the name like this? just loosing generality in my opinion, what if my pod name is "my-webapp"? It
-	// will break all the system
-	sourcePod = strings.Split(sourcePod, "-migration-")[0]
-	pod.Name = sourcePod + "-migration-" + strconv.Itoa(number.Intn(100))
-	// pod.Spec.ClonePod = sourcePod
-	pod.ObjectMeta.Annotations["snapshotPolicy"] = "restore"
-	pod.ObjectMeta.Annotations["snapshotPath"] = checkpointPath
-	if err := r.Create(ctx, pod); err != nil {
-		return nil, err
-	}
-	return pod, nil
-}
-
 func (r *LiveMigrationReconciler) checkPodExist(ctx context.Context, name, namespace string) (*corev1.Pod, error) {
 	var childPods corev1.PodList
 	if err := r.List(ctx, &childPods, client.InNamespace(namespace)); err != nil {
@@ -695,7 +404,6 @@ func (r *LiveMigrationReconciler) updateAnnotations(ctx context.Context, pod *co
 func (r *LiveMigrationReconciler) checkpointPodCrio(containers []Container, namespace string, podName string) error {
 	// curl -sk -XPOST "https://localhost:10250/checkpoint/liqo-demo/tomcat-pod/tomcat"
 
-	// for di curl per prendere tutti i container?
 	for _, container := range containers {
 		curlPath := "https://localhost:10250/checkpoint/" + namespace + "/" + podName + "/" + container.Name
 		checkpointCmd := exec.Command("curl", "-sk", "-XPOST", curlPath)
@@ -709,21 +417,6 @@ func (r *LiveMigrationReconciler) checkpointPodCrio(containers []Container, name
 			klog.InfoS("checkpointed pod", "output", string(output))
 		}
 	}
-
-	// exportPath := "/home/ubuntu/live-migration-operator/checkpoint/" + containerID + ".tar"
-	// exportPath := "/home/poggio/Documenti/GitHub/Pod-migration/live-migration-operator/checkpoint/" + containerID + ".tar"
-	// checkpointCmd := exec.Command("sudo", "crictl", "checkpoint", "--export", exportPath, containerID)
-	// checkpointCmd := exec.Command("/bin/sh", "-c", "crictl checkpoint --export=/home/ubuntu/live-migration-operator/checkpoint/"+containerID+".tar "+containerID)
-	// Execute the checkpoint command.
-
-	// err = os.Chmod("/home/ubuntu/live-migration-operator/checkpoint/"+containerID+".tar", 777)
-	/* err = os.Chmod("/home/poggio/Documenti/GitHub/Pod-migration/live-migration-operator/checkpoint/"+containerID+".tar", 777)
-	if err != nil {
-		klog.ErrorS(err, "failed to give privilege", "container", containerID, "output", string(output))
-	} else {
-		klog.InfoS("gave privilege", "container", containerID, "output", string(output))
-	}
-	*/
 
 	return nil
 }
@@ -761,107 +454,6 @@ func PrintContainerIDs(clientset *kubernetes.Clientset) ([]Container, error) {
 	}
 
 	return containers, nil
-}
-
-func (r *LiveMigrationReconciler) restorePodFinal(ctx context.Context, pod *corev1.Pod, podName string, namespace string, checkpointPath string) (*corev1.Pod, error) {
-
-	pod.Name = podName
-	// pod.Spec.ClonePod = sourcePod
-	pod.ObjectMeta.Annotations["snapshotPolicy"] = "restore"
-	pod.ObjectMeta.Annotations["snapshotPath"] = checkpointPath
-
-	// pod.Spec.NodeSelector = map[string]string{
-	//	"kubernetes.io/hostname": destinationHost,
-	//}
-
-	// pod.Spec.ClonePod = sourcePod
-	// restoredPod.ObjectMeta.Annotations["snapshotPolicy"] = "restore"
-	// restoredPod.ObjectMeta.Annotations["snapshotPath"] = snapshotPath
-	if err := r.Create(ctx, pod); err != nil {
-		klog.ErrorS(err, "failed to create restored pod", "podName", podName, "namespace", namespace)
-	} else {
-		klog.InfoS("restored pod", "podName", podName, "namespace", namespace)
-	}
-
-	return pod, nil
-}
-
-func (r *LiveMigrationReconciler) restorePodCrio(podName string, namespace string, containers []Container, clientset *kubernetes.Clientset, destinationHost string) error {
-
-	podClient := clientset.CoreV1().Pods(namespace)
-	_, err := podClient.Get(context.Background(), podName, metav1.GetOptions{})
-	if err != nil {
-		klog.Infof("Pod is deleted", "podName", podName, "namespace", namespace)
-	} else {
-		klog.Errorf("Pod is not correctly deleted!", "podName", podName, "namespace", namespace)
-	}
-
-	restoredPod := createRestoredPod(podName, namespace)
-	// Aggiorna il campo nodeSelector del Pod.
-	restoredPod.Spec.NodeSelector = map[string]string{
-		"kubernetes.io/hostname": destinationHost,
-	}
-
-	i := 0
-	for _, container := range containers {
-
-		klog.Infof("restoring container %d %s", i, container.Name)
-
-		newContainer := core.Container{
-			Name:  container.Name,
-			Image: "docker.io/leonardopoggiani/checkpoint-images:" + container.ID,
-		}
-
-		restoredPod.Spec.Containers = append(restoredPod.Spec.Containers, newContainer)
-
-		klog.Infof("restored pod %s", restoredPod.Spec.Containers[i].Name)
-		i += 1
-	}
-
-	// Update the pod
-	_, err = podClient.Create(context.Background(), restoredPod, metav1.CreateOptions{})
-	if err != nil {
-		klog.ErrorS(err, "failed to update pod", "podName", podName, "namespace", namespace)
-		return err
-	}
-
-	// first i create all the containers, then i wait for them to be ready
-	for _, container := range containers {
-		// Wait for the new container to become ready.
-		err = r.waitForContainerReady(podName, namespace, container.Name, clientset)
-		if err != nil {
-			klog.ErrorS(err, "container did not become ready", "podName", podName, "namespace", namespace, "containerName", container.Name)
-			return err
-		}
-
-		// Delete the old container.
-		deleteCmd := exec.Command("sudo", "crictl", "rm", container.ID)
-		// deleteCmd := exec.Command("/bin/sh", "-c", "crictl rm "+container.ID)
-		output, err := deleteCmd.CombinedOutput()
-		if err != nil {
-			klog.ErrorS(err, "failed to delete container", "containerID", container.ID, "output", string(output))
-			return err
-		} else {
-			klog.InfoS("deleted container", "containerID", container.ID, "output", string(output))
-		}
-	}
-
-	// Aggiorna il Pod.
-	_, err = clientset.CoreV1().Pods("liqo-demo").Update(context.Background(), restoredPod, metav1.UpdateOptions{})
-	if err != nil {
-		panic(err)
-	}
-
-	return nil
-}
-
-func createRestoredPod(restoredName string, restoredNamespace string) *core.Pod {
-	return &core.Pod{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      restoredName,
-			Namespace: restoredNamespace,
-		},
-	}
 }
 
 func (r *LiveMigrationReconciler) waitForContainerReady(podName string, namespace string, containerName string, clientset *kubernetes.Clientset) error {
@@ -957,7 +549,7 @@ func waitForPodDeletion(ctx context.Context, podName string, clientset *kubernet
 	return fmt.Errorf("pod %s not found or already deleted", podName)
 }
 
-func (r *LiveMigrationReconciler) tryBuildah(ctx context.Context, pod *corev1.Pod, podName string, namespace string, clientset *kubernetes.Clientset, files []os.DirEntry, dir string) (*corev1.Pod, error) {
+func (r *LiveMigrationReconciler) buildahCheckpointRestore(ctx context.Context, pod *corev1.Pod, podName string, namespace string, files []os.DirEntry, dir string) (*corev1.Pod, error) {
 
 	var containersList []corev1.Container
 
@@ -1068,14 +660,5 @@ func (r *LiveMigrationReconciler) tryBuildah(ctx context.Context, pod *corev1.Po
 		klog.InfoS("restored pod", "podName", podName, "namespace", namespace)
 	}
 
-	/*
-		_, err := clientset.CoreV1().Pods("liqo-demo").Create(context.Background(), pod, metav1.CreateOptions{})
-		if err != nil {
-			klog.ErrorS(err, "unable to create pod", "pod", podName)
-			return nil, err
-		} else {
-			klog.Info("pod created ", podName)
-		}
-	*/
 	return pod, nil
 }
