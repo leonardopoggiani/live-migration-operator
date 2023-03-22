@@ -54,6 +54,13 @@ jobs:
           username: ${{ github.repository_owner }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Show Working Directory
+        run: |
+          pwd
+
+      - name: List files in working directory
+        run: ls -la
+
       - name: Go Format
         run: gofmt -s -w . && git diff --exit-code
 
