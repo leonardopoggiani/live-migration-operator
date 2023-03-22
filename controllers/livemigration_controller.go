@@ -616,7 +616,7 @@ func (r *LiveMigrationReconciler) buildahCheckpointRestore(ctx context.Context, 
 
 		authFile := "/run/user/1000/containers/auth.json"
 		localCheckpointPath = "localhost/" + localCheckpointPath
-		remoteCheckpointPath := "docker-daemon://docker.io/leonardopoggiani/checkpoint-images:" + containerName
+		remoteCheckpointPath := "docker.io/leonardopoggiani/checkpoint-images:" + containerName
 		pushCheckpointCmd := exec.Command("sudo", "buildah", "push", "--authfile", authFile, localCheckpointPath, remoteCheckpointPath)
 		klog.Infof(pushCheckpointCmd.String())
 		if err = pushCheckpointCmd.Run(); err != nil {
