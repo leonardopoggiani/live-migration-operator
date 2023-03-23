@@ -4,6 +4,12 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"strings"
+	"time"
+
 	api "github.com/leonardopoggiani/live-migration-operator/api/v1alpha1"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -13,13 +19,8 @@ import (
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/clientcmd"
 	"k8s.io/klog/v2"
-	"os"
-	"os/exec"
-	"path/filepath"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"strings"
-	"time"
 )
 
 // LiveMigrationReconciler reconciles a LiveMigration object
@@ -623,6 +624,7 @@ func (r *LiveMigrationReconciler) buildahCheckpointRestore(ctx context.Context, 
 	pod.Name = podName
 	pod.Namespace = namespace
 	pod.Spec.Containers = containersList
+	pod.Spec.ShareProcessNamespace = &[]bool{true}[0]
 
 	pod.ObjectMeta.Annotations["snapshotPolicy"] = "restore"
 

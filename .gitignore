@@ -34,3 +34,6 @@ checkpoint
 checkpoint/*
 
 logs/
+
+config/samples/
+config/samples/*

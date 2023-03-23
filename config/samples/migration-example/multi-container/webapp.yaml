@@ -4,6 +4,7 @@ metadata:
   name: multi-container-pod
   namespace: liqo-demo
 spec:
+  shareProcessNamespace: true
   containers:
     - name: web
       image: docker.io/library/nginx
