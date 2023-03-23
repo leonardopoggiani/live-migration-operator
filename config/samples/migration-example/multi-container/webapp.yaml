@@ -2,32 +2,26 @@ apiVersion: v1
 kind: Pod
 metadata:
   name: multi-container-pod
-  namespace: liqo-demo
 spec:
   shareProcessNamespace: true
   containers:
-    - name: web
-      image: docker.io/library/nginx
-      imagePullPolicy: IfNotPresent
-      ports:
-        - containerPort: 80
-    - name: db
-      image: docker.io/library/mysql:latest
-      imagePullPolicy: IfNotPresent
-      env:
-        - name: MYSQL_ROOT_PASSWORD
-          value: "password"
-        - name: MYSQL_DATABASE
-          value: "app"
-        - name: MYSQL_USER
-          value: "app"
-        - name: MYSQL_PASSWORD
-          value: "password"
-      volumeMounts:
-        - name: db-data
-          mountPath: /var/lib/mysql
+  - name: web-server
+    imagePullPolicy: IfNotPresent
+    image: nginx
+    ports:
+    - containerPort: 80
+    volumeMounts:
+    - name: shared-data
+      mountPath: /usr/share/nginx/html
+  - name: file-watcher
+    image: busybox
+    imagePullPolicy: IfNotPresent
+    volumeMounts:
+    - name: shared-data
+      mountPath: /watch
+    command: ["/bin/sh", "-c", "while true; do find /watch -type f -exec cat {} +; done"]
+  volumes:
+  - name: shared-data
+    emptyDir: {}
   nodeSelector:
     kubernetes.io/hostname: poggiani-1-master
-  volumes:
-    - name: db-data
-      emptyDir: {}
