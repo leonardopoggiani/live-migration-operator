@@ -3,6 +3,7 @@ kind: Pod
 metadata:
   name: tomcat-pod
 spec:
+  shareProcessNamespace: true
   containers:
     - name: tomcat
       image: docker.io/leonardopoggiani/checkpoint-images:tomcat

@@ -25,7 +25,6 @@ api-server/out/*
 build
 deployments
 hack
-*.txt
 
 checkpoints
 checkpoints/*
