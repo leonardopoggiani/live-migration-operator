@@ -5,9 +5,9 @@ go 1.20
 require (
 	github.com/containers/buildah v1.26.2
 	github.com/containers/storage v1.45.4
-	github.com/emicklei/go-restful/v3 v3.9.0
 	github.com/onsi/ginkgo/v2 v2.9.2
 	github.com/onsi/gomega v1.27.4
+	github.com/emicklei/go-restful/v3 v3.10.2
 	k8s.io/api v0.26.3
 	k8s.io/apimachinery v0.26.3
 	k8s.io/client-go v0.26.3
