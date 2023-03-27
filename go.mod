@@ -3,10 +3,10 @@ module github.com/leonardopoggiani/live-migration-operator
 go 1.20
 
 require (
-	github.com/containers/buildah v1.26.2
+	github.com/containers/buildah v1.29.2
 	github.com/containers/storage v1.45.4
 	github.com/onsi/ginkgo/v2 v2.9.2
-	github.com/onsi/gomega v1.27.4
+	github.com/onsi/gomega v1.27.5
 	github.com/emicklei/go-restful/v3 v3.10.2
 	k8s.io/api v0.26.3
 	k8s.io/apimachinery v0.26.3
@@ -54,6 +54,7 @@ require (
 	github.com/go-openapi/jsonpointer v0.19.5 // indirect
 	github.com/go-openapi/jsonreference v0.20.0 // indirect
 	github.com/go-openapi/swag v0.22.3 // indirect
+	github.com/go-openapi/validate v0.22.0 // indirect
 	github.com/go-task/slim-sprig v0.0.0-20230315185526-52ccab3ef572 // indirect
 	github.com/gogo/protobuf v1.3.2 // indirect
 	github.com/golang/groupcache v0.0.0-20210331224755-41bb18bfe9da // indirect
