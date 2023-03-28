@@ -15,6 +15,9 @@ on:
         required: false
         type: boolean
 
+  env:
+    SSH_AUTH_SOCK: /tmp/ssh_agent.sock
+
 jobs:
   run:
     name: Build
@@ -33,6 +36,14 @@ jobs:
           fetch-depth: 0
           repository: leonardopoggiani/live-migration-operator
           token: ${{ secrets.TOKEN }}
+
+      - name: Copy SSH key
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          ssh-agent -a "$SSH_AUTH_SOCK" > /dev/null
+          ssh-add ~/.ssh/id_rsa
 
       - name: Set up Git auth
         run: |
