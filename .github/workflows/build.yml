@@ -72,7 +72,9 @@ jobs:
           go get github.com/leonardopoggiani/live-migration-operator
 
       - name: Update dependencies
-        run: go mod tidy
+        run: |
+          go mod tidy
+          go get -u github.com/containers/buildah
 
       - name: Go Format
         run: gofmt -s -w .
