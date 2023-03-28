@@ -1,5 +1,8 @@
 name: build
 
+env:
+  SSH_AUTH_SOCK: /tmp/ssh_agent.sock
+
 on:
   push:
     branches: [main]
@@ -14,9 +17,6 @@ on:
         default: false
         required: false
         type: boolean
-
-  env:
-    SSH_AUTH_SOCK: /tmp/ssh_agent.sock
 
 jobs:
   run:
