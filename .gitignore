@@ -33,6 +33,6 @@ checkpoint
 checkpoint/*
 
 logs/
-
+*.txt
 config/samples/
 config/samples/*
