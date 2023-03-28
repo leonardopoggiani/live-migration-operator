@@ -1,12 +1,12 @@
 apiVersion: v1
 kind: Pod
 metadata:
-  name: restored-nginx
+  name: nginx
   namespace: liqo-demo
 spec:
   containers:
     - name: web
-      image: docker.io/leonardopoggiani/checkpoint-images:web
+      image: localhost/checkpoint-image:latest
       imagePullPolicy: IfNotPresent
       ports:
         - containerPort: 80

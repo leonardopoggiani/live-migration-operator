@@ -4,11 +4,11 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"github.com/leonardopoggiani/live-migration-operator/api-server/endpoints"
 	"k8s.io/klog/v2"
 	"net/http"
 
 	"github.com/emicklei/go-restful/v3"
-	"github.com/leonardopoggiani/live-migration-operator/api-server/endpoints"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	kubelog "sigs.k8s.io/controller-runtime/pkg/log"
 )

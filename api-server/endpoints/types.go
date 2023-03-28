@@ -31,12 +31,6 @@ type Livemigration struct {
 func (pm *Livemigration) Validate() error {
 	var validated bool
 	validated = true
-	//TODO(Tuong): check template is valid or not
-	// if pm.Template == checkTemplate {
-	// 	return error.New("template can't be empty")
-	// } else {
-	// 	validated = true
-	// }
 	if validated {
 		return nil
 	}

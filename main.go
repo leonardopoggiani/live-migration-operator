@@ -19,7 +19,6 @@ package main
 import (
 	"flag"
 	"os"
-
 	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
 	// to ensure that exec-entrypoint and run can make use of them.
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
@@ -87,6 +86,21 @@ func main() {
 	}
 	//+kubebuilder:scaffold:builder
 
+	//ctx context.Context, cl client.Client,
+	//	virtualStorageClassName, storageNamespace, localRealStorageClass string) (controller.Provisioner, error) {
+	/* prov, err := provisioner.NewCheckpointProvisioner(context.Background(), mgr.GetClient(), "", "", "")
+	if err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "CheckpointProvisioner")
+		os.Exit(1)
+	} else {
+		if err = prov.SetupWithManager(mgr); err != nil {
+			setupLog.Error(err, "unable to create controller", "controller", "CheckpointProvisioner")
+			os.Exit(1)
+		}
+		klog.Infof("", "CheckpointProvisioner created", prov)
+	}
+	*/
+
 	if err := mgr.AddHealthzCheck("healthz", healthz.Ping); err != nil {
 		setupLog.Error(err, "unable to set up health check")
 		os.Exit(1)
@@ -102,3 +116,20 @@ func main() {
 		os.Exit(1)
 	}
 }
+
+/*
+// SetupWithManager registers a new controller for ForeignCluster resources.
+func (c *Controller) SetupWithManager(mgr ctrl.Manager) error {
+	c.peeringPhases = make(map[string]consts.PeeringPhase)
+	c.networkingEnabled = make(map[string]bool)
+
+	resourceToBeProccesedPredicate := predicate.Funcs{
+		DeleteFunc: func(e event.DeleteEvent) bool {
+			return false
+		},
+	}
+	return ctrl.NewControllerManagedBy(mgr).Named(operatorName).WithEventFilter(resourceToBeProccesedPredicate).
+		For(&discoveryv1alpha1.ForeignCluster{}).
+		Complete(c)
+}
+*/
