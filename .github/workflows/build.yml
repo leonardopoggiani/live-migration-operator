@@ -52,24 +52,17 @@ jobs:
           sudo apt update
           sudo apt install -y libbtrfs-dev libdevmapper-dev libgpgme-dev libseccomp-dev
           git remote set-url origin git@github.com:leonardopoggiani/live-migration-operator.git
-          git config --global credential.helper cache
           go env -w GOPRIVATE=github.com/leonardopoggiani/*
           git config --global --add url."git@github.com:".insteadOf "https://github.com/"
 
       - name: Install dependencies
-        run: go mod download
+        run: go get github.com/leonardopoggiani/live-migration-operator
 
       - name: Update dependencies
         run: go mod tidy
 
-      - name: Install dependencies
-        run: go get github.com/leonardopoggiani/live-migration-operator
-
       - name: Go Format
         run: gofmt -s -w .
-
-      - name: Go Generate
-        run: go generate ./...
 
       - name: Go Build
         run: go build -o live-migration-operator .
