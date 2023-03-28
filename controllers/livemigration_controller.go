@@ -38,7 +38,7 @@ func (r *LiveMigrationReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 	klog.Infof("Reconciling LiveMigration %s", req.Name)
 
 	// Load Kubernetes config
-	kubeconfig, err := clientcmd.BuildConfigFromFlags("", "/home/ubuntu/.kube/config")
+	kubeconfig, err := clientcmd.BuildConfigFromFlags("", "/home/fedora/.kube/config")
 	// kubeconfig, err := clientcmd.BuildConfigFromFlags("", "/home/ubuntu/.kube/config")
 	if err != nil {
 		klog.ErrorS(err, "failed to load Kubernetes config")

@@ -13,6 +13,7 @@ require (
 	k8s.io/client-go v0.26.3
 	k8s.io/klog/v2 v2.90.1
 	sigs.k8s.io/controller-runtime v0.14.6
+	sigs.k8s.io/sig-storage-lib-external-provisioner/v7 v7.0.1
 )
 
 require (
@@ -89,6 +90,7 @@ require (
 	github.com/mattn/go-runewidth v0.0.14 // indirect
 	github.com/mattn/go-shellwords v1.0.12 // indirect
 	github.com/matttproud/golang_protobuf_extensions v1.0.4 // indirect
+	github.com/miekg/dns v1.1.50 // indirect
 	github.com/miekg/pkcs11 v1.1.1 // indirect
 	github.com/mistifyio/go-zfs/v3 v3.0.0 // indirect
 	github.com/mitchellh/mapstructure v1.5.0 // indirect
