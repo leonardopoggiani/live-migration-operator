@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"github.com/containers/buildah"
 	"github.com/containers/storage/pkg/unshare"
@@ -58,6 +59,20 @@ func main() {
 	}
 
 	klog.Infof("Starting the LiveMigration controller manager")
+
+	//ctx context.Context, cl client.Client,
+	//	virtualStorageClassName, storageNamespace, localRealStorageClass string) (controller.Provisioner, error) {
+	prov, err := controllers.NewCheckpointProvisioner(context.Background(), mgr.GetClient(), "", "", "")
+	if err != nil {
+		klog.Error(err, "unable to create controller", "controller", "CheckpointProvisioner")
+		os.Exit(1)
+	} else {
+		// if err = prov.SetupWithManager(mgr); err != nil {
+		//	setupLog.Error(err, "unable to create controller", "controller", "CheckpointProvisioner")
+		//	os.Exit(1)
+		//}
+		klog.Infof("", "CheckpointProvisioner created", prov)
+	}
 
 	if err = (&controllers.LiveMigrationReconciler{
 		Client: mgr.GetClient(),
