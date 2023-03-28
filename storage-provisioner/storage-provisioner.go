@@ -1,4 +1,4 @@
-package controllers
+package storage_provisioner
 
 import (
 	"bufio"
@@ -130,7 +130,11 @@ func NewCheckpointProvisioner(ctx context.Context, cl client.Client, storageName
 		},
 	})
 
-	klog.Error(err)
+	if err != nil {
+		klog.ErrorS(err, "Failed to create the storage namespace", "storageNamespace", storageNamespace)
+	} else {
+		klog.InfoS("Storage namespace created", "storageNamespace", storageNamespace)
+	}
 
 	return &CheckpointProvisioner{
 		client:                  cl,

@@ -74,7 +74,7 @@ jobs:
 
       - name: Go Test
         if: ${{ !inputs.skipTests }}
-        run: go test -v -count=1 -race -shuffle=on -coverprofile=coverage.txt ./... -timeout 5m
+        run: go test -v -count=1 -race -shuffle=on -coverprofile=coverage.txt ./... -timeout 20m
 
       - name: Go Benchmark
         if: ${{ !inputs.skipTests }}

@@ -7,6 +7,7 @@ import (
 	"github.com/containers/storage/pkg/unshare"
 	livemigrationv1 "github.com/leonardopoggiani/live-migration-operator/api/v1alpha1"
 	"github.com/leonardopoggiani/live-migration-operator/controllers"
+	"github.com/leonardopoggiani/live-migration-operator/storage-provisioner"
 	"k8s.io/klog/v2"
 	"os"
 
@@ -62,7 +63,7 @@ func main() {
 
 	//ctx context.Context, cl client.Client,
 	//	virtualStorageClassName, storageNamespace, localRealStorageClass string) (controller.Provisioner, error) {
-	prov, err := controllers.NewCheckpointProvisioner(context.Background(), mgr.GetClient(), "liqo-demo-storage")
+	prov, err := storage_provisioner.NewCheckpointProvisioner(context.Background(), mgr.GetClient(), "liqo-demo-storage")
 	if err != nil {
 		klog.Error(err, "unable to create controller", "controller", "CheckpointProvisioner")
 		os.Exit(1)
