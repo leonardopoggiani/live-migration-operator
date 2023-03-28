@@ -3,7 +3,7 @@ module github.com/leonardopoggiani/live-migration-operator
 go 1.20
 
 require (
-	github.com/containers/buildah v1.29.2
+	github.com/containers/buildah v1.29.1
 	github.com/containers/storage v1.45.4
 	github.com/onsi/ginkgo/v2 v2.9.2
 	github.com/onsi/gomega v1.27.5
