@@ -55,11 +55,6 @@ jobs:
           go env -w GOPRIVATE=github.com/leonardopoggiani/*
           git config --global --add url."git@github.com:".insteadOf "https://github.com/"
 
-      - name: Install dependencies
-        run: |
-          go get github.com/leonardopoggiani/live-migration-operator
-          go get github.com/leonardopoggiani/live-migration-operator/storage-provisioner
-
       - name: Update dependencies
         run: go mod tidy
 
