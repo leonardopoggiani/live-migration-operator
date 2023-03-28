@@ -122,8 +122,7 @@ func (c CheckpointProvisioner) Delete(ctx context.Context, volume *corev1.Persis
 	panic("implement me")
 }
 
-func NewCheckpointProvisioner(ctx context.Context, cl client.Client,
-	virtualStorageClassName, storageNamespace, localRealStorageClass string) (controller.Provisioner, error) {
+func NewCheckpointProvisioner(ctx context.Context, cl client.Client, storageNamespace string) (controller.Provisioner, error) {
 	// ensure that the storage namespace exists
 	err := cl.Create(ctx, &corev1.Namespace{
 		ObjectMeta: metav1.ObjectMeta{
@@ -135,9 +134,9 @@ func NewCheckpointProvisioner(ctx context.Context, cl client.Client,
 
 	return &CheckpointProvisioner{
 		client:                  cl,
-		virtualStorageClassName: virtualStorageClassName,
+		virtualStorageClassName: "",
 		storageNamespace:        storageNamespace,
-		localRealStorageClass:   localRealStorageClass,
+		localRealStorageClass:   "",
 	}, nil
 }
 

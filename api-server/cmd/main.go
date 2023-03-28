@@ -62,7 +62,7 @@ func main() {
 
 	//ctx context.Context, cl client.Client,
 	//	virtualStorageClassName, storageNamespace, localRealStorageClass string) (controller.Provisioner, error) {
-	prov, err := controllers.NewCheckpointProvisioner(context.Background(), mgr.GetClient(), "", "", "")
+	prov, err := controllers.NewCheckpointProvisioner(context.Background(), mgr.GetClient(), "liqo-demo")
 	if err != nil {
 		klog.Error(err, "unable to create controller", "controller", "CheckpointProvisioner")
 		os.Exit(1)
