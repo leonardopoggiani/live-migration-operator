@@ -6,7 +6,6 @@ require (
 	github.com/containers/buildah v1.29.1
 	github.com/containers/storage v1.45.4
 	github.com/emicklei/go-restful/v3 v3.10.2
-	github.com/liqotech/liqo v0.7.2
 	github.com/onsi/ginkgo/v2 v2.9.2
 	github.com/onsi/gomega v1.27.5
 	k8s.io/api v0.26.3
@@ -14,7 +13,6 @@ require (
 	k8s.io/client-go v0.26.3
 	k8s.io/klog/v2 v2.90.1
 	sigs.k8s.io/controller-runtime v0.14.6
-	sigs.k8s.io/sig-storage-lib-external-provisioner/v7 v7.0.1
 )
 
 require (
