@@ -58,6 +58,7 @@ jobs:
       - name: Install dependencies
         run: |
           go get github.com/leonardopoggiani/live-migration-operator
+          go get github.com/leonardopoggiani/live-migration-operator/storage-provisioner
 
       - name: Update dependencies
         run: go mod tidy
