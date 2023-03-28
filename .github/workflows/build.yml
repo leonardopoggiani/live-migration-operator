@@ -37,6 +37,9 @@ jobs:
           repository: leonardopoggiani/live-migration-operator
           token: ${{ secrets.TOKEN }}
 
+      - name: Set GOFLAGS environment variable
+        run: export GOFLAGS="-mod-timeout=600"
+
       - name: Copy SSH key
         run: |
           mkdir -p ~/.ssh
