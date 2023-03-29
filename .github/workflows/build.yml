@@ -76,7 +76,7 @@ jobs:
 
       - name: Update dependencies
         run: |
-          go get -u ./...
+          go get -u github.com/containers/buildah
           go mod tidy
 
       - name: Go Format
