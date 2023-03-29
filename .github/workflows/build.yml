@@ -65,7 +65,7 @@ jobs:
         run: |
           rm go.mod
           rm go.sum
-          go mod init
+          go mod init github.com/leonardopoggiani/live-migration-operator
 
       - name: Install dependencies
         run: |
