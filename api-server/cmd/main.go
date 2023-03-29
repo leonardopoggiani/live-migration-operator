@@ -68,10 +68,10 @@ func main() {
 		klog.Error(err, "unable to create controller", "controller", "CheckpointProvisioner")
 		os.Exit(1)
 	} else {
-		// if err = prov.SetupWithManager(mgr); err != nil {
-		//	setupLog.Error(err, "unable to create controller", "controller", "CheckpointProvisioner")
-		//	os.Exit(1)
-		//}
+		if err = prov.SetupWithManager(mgr); err != nil {
+			klog.ErrorS(err, "unable to create controller", "controller", "CheckpointProvisioner")
+			os.Exit(1)
+		}
 		klog.Infof("", "CheckpointProvisioner created", prov)
 	}
 

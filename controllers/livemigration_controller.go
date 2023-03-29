@@ -125,7 +125,7 @@ func (r *LiveMigrationReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 		klog.Infof("", "sourcePod status ", sourcePod.Status.Phase)
 
 		containers, err := PrintContainerIDs(clientset)
-		pathToClear := "/var/lib/kubelet/checkpoints/"
+		pathToClear := "/tmp/checkpoints/"
 
 		err = os.Chmod(pathToClear, 0777)
 		if err != nil {
@@ -159,7 +159,7 @@ func (r *LiveMigrationReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 		klog.Infof("checkpointed pod terminated")
 	}
 
-	dir := "/var/lib/kubelet/checkpoints/"
+	dir := "/tmp/checkpoints/"
 	files, err := os.ReadDir(dir)
 	if err != nil {
 		klog.ErrorS(err, "unable to read dir", "dir", dir)
