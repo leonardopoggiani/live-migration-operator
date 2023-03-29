@@ -10,7 +10,9 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	"sigs.k8s.io/sig-storage-lib-external-provisioner/v7/controller"
 	"time"
 )
@@ -32,6 +34,11 @@ type CheckpointProvisioner struct {
 	virtualStorageClassName string
 	storageNamespace        string
 	localRealStorageClass   string
+}
+
+func (c CheckpointProvisioner) Reconcile(ctx context.Context, request reconcile.Request) (reconcile.Result, error) {
+	//TODO implement me
+	panic("implement me")
 }
 
 func (c CheckpointProvisioner) Provision(ctx context.Context, options controller.ProvisionOptions) (*corev1.PersistentVolume, controller.ProvisioningState, error) {
@@ -146,4 +153,10 @@ func NewCheckpointProvisioner(ctx context.Context, cl client.Client, storageName
 		storageNamespace:        storageNamespace,
 		localRealStorageClass:   "",
 	}, nil
+}
+
+func SetupWithManager(mgr ctrl.Manager) error {
+	return ctrl.NewControllerManagedBy(mgr).
+		For(&corev1.PersistentVolume{}).
+		Complete(&CheckpointProvisioner{})
 }
