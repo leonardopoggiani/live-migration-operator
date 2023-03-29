@@ -61,6 +61,12 @@ jobs:
       - name: Set GOPRIVATE environment variable
         run: echo "export GOPRIVATE=github.com/leonardopoggiani" >> $GITHUB_ENV
 
+      - name: Delete go.mod
+        run: |
+          rm go.mod
+          rm go.sum
+          go mod init
+
       - name: Install dependencies
         run: |
           sudo apt update
