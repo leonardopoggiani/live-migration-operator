@@ -91,6 +91,14 @@ jobs:
       - name: Go Build
         run: go build -o live-migration-operator .
 
+      - name: Docker Build Storage Provisioner
+        run: docker build -t docker.io/leonardopoggiani/checkpoint-provisioner -f storage-provisioner/Dockerfile .
+
+      - name: Docker Push Storage Provisioner
+        run: |
+          docker login -u leonardopoggiani -p ${{ secrets.DOCKERHUB_TOKEN }}
+          docker push docker.io/leonardopoggiani/checkpoint-provisioner
+
       - name: Go Compile Tests
         if: ${{ inputs.skipTests }}
         run: go test -exec /bin/true ./...
