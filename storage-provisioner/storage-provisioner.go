@@ -37,8 +37,8 @@ type CheckpointProvisioner struct {
 }
 
 func (c CheckpointProvisioner) Reconcile(ctx context.Context, request reconcile.Request) (reconcile.Result, error) {
-	//TODO implement me
-	panic("implement me")
+	klog.Infof("Reconciling %s", request.NamespacedName)
+	return reconcile.Result{}, nil
 }
 
 func (c CheckpointProvisioner) Provision(ctx context.Context, options controller.ProvisionOptions) (*corev1.PersistentVolume, controller.ProvisioningState, error) {
