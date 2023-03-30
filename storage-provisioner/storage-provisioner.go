@@ -102,13 +102,14 @@ func (c CheckpointProvisioner) Provision(ctx context.Context, options controller
 		checkpointPath := filepath.Join(dir, file.Name())
 		klog.Infof("checkpointPath: %s", checkpointPath)
 
-		fileData, err := os.ReadFile("/tmp/checkpoints/")
+		fileData, err := os.ReadFile(checkpointPath)
 		if err != nil {
 			klog.ErrorS(err, "failed to read file")
 		}
 
 		// Add the file data to the request body
-		req.Body = io.NopCloser(bytes.NewReader(fileData))
+        req.Body = io.MultiReader(req.Body, bytes.NewReader(fileData))
+		// req.Body = io.NopCloser(bytes.NewReader(fileData))
 		req.Header.Set("Content-Type", "application/octet-stream")
 
 		// Send the request and handle the response
@@ -116,12 +117,13 @@ func (c CheckpointProvisioner) Provision(ctx context.Context, options controller
 		if err != nil {
 			klog.ErrorS(err, "failed to send request")
 		}
-		defer resp.Body.Close()
 
 		if resp.StatusCode != http.StatusOK {
-			klog.ErrorS(err, "failed to send file", "status", resp.StatusCode)
+			klog.ErrorS(nil, "failed to send file", "status", resp.StatusCode)
 		}
 	}
+
+    defer resp.Body.Close()
 
 	klog.Infof("Successfully sent file to remote cluster")
 

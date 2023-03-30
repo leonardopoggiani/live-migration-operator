@@ -34,15 +34,31 @@ type LiveMigrationReconciler struct {
 //+kubebuilder:rbac:groups=livemigration.liqo.io,resources=livemigrations/finalizers,verbs=update
 
 func (r *LiveMigrationReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	ctx = context.Background()
+	// ctx = context.Background()
 	klog.Infof("Reconciling LiveMigration %s", req.Name)
+    
+    // Load Kubernetes config
+    kubeconfigPath := os.Getenv("KUBECONFIG")
+    if kubeconfigPath == "" {
+        kubeconfigPath = "~/.kube/config"
+    }
+    
+    kubeconfigPath = os.ExpandEnv(kubeconfigPath)
+    if _, err := os.Stat(kubeconfigPath); os.IsNotExist(err) {
+        klog.ErrorS(err,"kubeconfig file not existing")
+    }
+    
+    kubeconfig, err := clientcmd.BuildConfigFromFlags("", kubeconfigPath)
+    if err != nil {
+        klog.ErrorS(err, "Failed to retrieve kubeconfig")
+    }
 
 	// Load Kubernetes config
-	kubeconfig, err := clientcmd.BuildConfigFromFlags("", "/home/fedora/.kube/config")
+	// kubeconfig, err := clientcmd.BuildConfigFromFlags("", "/home/fedora/.kube/config")
 	// kubeconfig, err := clientcmd.BuildConfigFromFlags("", "/home/ubuntu/.kube/config")
-	if err != nil {
-		klog.ErrorS(err, "failed to load Kubernetes config")
-	}
+	// if err != nil {
+	//	klog.ErrorS(err, "failed to load Kubernetes config")
+	//}
 
 	// Create Kubernetes API client
 	clientset, err := kubernetes.NewForConfig(kubeconfig)
@@ -114,7 +130,7 @@ func (r *LiveMigrationReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 	if annotations["snapshotPolicy"] == "live-migration" && annotations["sourcePod"] != "" {
 		// We are live-migrate a running pod here - Hot scale
 		klog.Infof("", "live-migrate a running pod")
-		// Step1: Check source pod is exist or not clean previous source pod checkpoint/restore annotations and snapshotPath
+		// Step1: Check source pod is exist or not clean previous source pod checkpoint/rtore annotations and snapshotPath
 		sourcePod, err := r.checkPodExist(ctx, annotations["sourcePod"], req.Namespace)
 		if err != nil || sourcePod == nil {
 			klog.ErrorS(err, "sourcePod not exist", "pod", annotations["sourcePod"])
@@ -124,7 +140,7 @@ func (r *LiveMigrationReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 		klog.Infof("", "Live-migration", "Step 1 - Check source pod is exist or not - completed")
 		klog.Infof("", "sourcePod status ", sourcePod.Status.Phase)
 
-		containers, err := PrintContainerIDs(clientset)
+		containers, err := PrintContainerIDs(clientset, req.Namespace)
 		pathToClear := "/tmp/checkpoints/"
 
 		err = os.Chmod(pathToClear, 0777)
@@ -311,6 +327,28 @@ func (r *LiveMigrationReconciler) checkPodExist(ctx context.Context, name, names
 
 	}
 	return nil, nil
+
+    /* alternative function
+    // Watch for changes to the pod's status
+    podWatcher, err := clientset.CoreV1().Pods(req.Namespace).Watch(ctx, metav1.ListOptions{FieldSelector: "metadata.name=" + pod.Name})
+    if err != nil {
+        klog.ErrorS(err, "failed to watch pod")                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                
+        return ctrl.Result{}, err
+    }
+    defer podWatcher.Stop()
+    
+    // Wait for the pod to be running
+    for event := range podWatcher.ResultChan() {
+        if event.Type == watch.Modified {
+            updatedPod := event.Object.(*corev1.Pod)
+            if updatedPod.Status.Phase == corev1.PodRunning {
+                klog.InfoS("pod is running")
+                break
+            }
+        }
+    }
+
+    */
 }
 
 func (r *LiveMigrationReconciler) getSourcePodTemplate(ctx context.Context, sourcePodName string, namespace string) (*corev1.PodTemplateSpec, error) {
@@ -352,10 +390,8 @@ func (r *LiveMigrationReconciler) removeCheckpointPod(ctx context.Context, pod *
 	if err := r.updateAnnotations(ctx, pod, snapshotPolicyUpdate, snapshotPathUpdate); err != nil {
 		return err
 	}
-	// this is where i need the permissions executing the controller are we really sure it's better like this
-	// and not just keeping all the checkpoint versions (how much space are we talking about?) and maybe incremetally
-	// increase the version number?
-	err := os.Chmod(snapshotPathCurrent, 0777)
+	
+    err := os.Chmod(snapshotPathCurrent, 0777)
 	if err != nil {
 		return err
 	}
@@ -402,9 +438,9 @@ type Container struct {
 	Name string
 }
 
-func PrintContainerIDs(clientset *kubernetes.Clientset) ([]Container, error) {
+func PrintContainerIDs(clientset *kubernetes.Clientset, namespace string) ([]Container, error) {
 	// Get pods in liqo-demo namespace
-	pods, err := clientset.CoreV1().Pods("liqo-demo").List(context.Background(), metav1.ListOptions{})
+	pods, err := clientset.CoreV1().Pods(namespace).List(context.Background(), metav1.ListOptions{})
 	if err != nil {
 		return nil, fmt.Errorf("failed to list pods: %v", err)
 	}
@@ -462,11 +498,11 @@ func (r *LiveMigrationReconciler) waitForContainerReady(podName string, namespac
 	}
 }
 
-func (r *LiveMigrationReconciler) terminateCheckpointedPod(ctx context.Context, podName string, clientset *kubernetes.Clientset) error {
+func (r *LiveMigrationReconciler) terminateCheckpointedPod(ctx context.Context, podName string, namespace string, clientset *kubernetes.Clientset) error {
 	// get the pod by name
 	klog.Infof("", "Terminating pod ", podName)
 
-	pod, err := clientset.CoreV1().Pods("liqo-demo").Get(context.Background(), podName, metav1.GetOptions{})
+	pod, err := clientset.CoreV1().Pods(namespace).Get(context.Background(), podName, metav1.GetOptions{})
 	if err != nil {
 		klog.ErrorS(err, "unable to get pod ", pod.Name)
 	} else {
@@ -474,7 +510,7 @@ func (r *LiveMigrationReconciler) terminateCheckpointedPod(ctx context.Context, 
 	}
 
 	// delete the pod
-	err = clientset.CoreV1().Pods("liqo-demo").Delete(context.Background(), podName, metav1.DeleteOptions{})
+	err = clientset.CoreV1().Pods(namespace).Delete(context.Background(), podName, metav1.DeleteOptions{})
 	if err != nil {
 		klog.ErrorS(err, "unable to delete pod", pod.Name)
 	} else {
@@ -492,7 +528,7 @@ func (r *LiveMigrationReconciler) terminateCheckpointedPod(ctx context.Context, 
 	return nil
 }
 
-func waitForPodDeletion(ctx context.Context, podName string, clientset *kubernetes.Clientset) error {
+func waitForPodDeletion(ctx context.Context, podName string, namespace string, clientset *kubernetes.Clientset) error {
 
 	fieldSelector := fmt.Sprintf("metadata.name=%s", podName)
 
@@ -502,7 +538,7 @@ func waitForPodDeletion(ctx context.Context, podName string, clientset *kubernet
 		FieldSelector: fieldSelector,
 	}
 
-	w, err := clientset.CoreV1().Pods("liqo-demo").Watch(ctx, opts)
+	w, err := clientset.CoreV1().Pods(namespace).Watch(ctx, opts)
 	if err != nil {
 		klog.ErrorS(err, "unable to watch pod", "pod", podName)
 	}
