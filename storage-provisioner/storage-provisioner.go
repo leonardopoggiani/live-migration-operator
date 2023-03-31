@@ -7,6 +7,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/klog/v2"
+	"net"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -81,7 +82,9 @@ func (c CheckpointProvisioner) Provision(ctx context.Context, options controller
 	// need to open a socket to the liqo gateway service on the remote cluster
 	// remote gateway service address
 
-	client := &http.Client{}
+	client := &http.Client{
+		Timeout: time.Second * 10,
+	}
 	// req, err := http.NewRequestWithContext(context.Background(), "POST", "http://dummy-service.liqo-demo.svc.cluster.local:80/checkpoint", nil)
 	// http://flights-service.offloaded:7999/schedule
 	req, err := http.NewRequestWithContext(context.Background(), "POST", "http://flights-service.offloaded:7999/schedule", nil)
@@ -108,8 +111,8 @@ func (c CheckpointProvisioner) Provision(ctx context.Context, options controller
 		}
 
 		// Add the file data to the request body
-        req.Body = io.MultiReader(req.Body, bytes.NewReader(fileData))
-		// req.Body = io.NopCloser(bytes.NewReader(fileData))
+		// req.Body = io.MultiReader(req.Body, bytes.NewReader(fileData))
+		req.Body = io.NopCloser(bytes.NewReader(fileData))
 		req.Header.Set("Content-Type", "application/octet-stream")
 
 		// Send the request and handle the response
@@ -117,13 +120,12 @@ func (c CheckpointProvisioner) Provision(ctx context.Context, options controller
 		if err != nil {
 			klog.ErrorS(err, "failed to send request")
 		}
+		defer resp.Body.Close()
 
 		if resp.StatusCode != http.StatusOK {
 			klog.ErrorS(nil, "failed to send file", "status", resp.StatusCode)
 		}
 	}
-
-    defer resp.Body.Close()
 
 	klog.Infof("Successfully sent file to remote cluster")
 
@@ -161,4 +163,71 @@ func SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&corev1.PersistentVolume{}).
 		Complete(&CheckpointProvisioner{})
+}
+
+func (c CheckpointProvisioner) sendCheckpoint(ctx context.Context, pvName string) error {
+	dir := "/tmp/checkpoints"
+	files, err := os.ReadDir(dir)
+	if err != nil {
+		klog.ErrorS(err, "unable to read dir", "dir", dir)
+		return err
+	}
+
+	// Open a TCP connection to the remote cluster gateway service
+	conn, err := net.DialTimeout("tcp", "liqo-gateway-service.remote-cluster.svc.cluster.local:12345", 10*time.Second)
+	if err != nil {
+		klog.ErrorS(err, "failed to open connection to remote cluster gateway service")
+		return err
+	}
+	defer func(conn net.Conn) {
+		err := conn.Close()
+		if err != nil {
+
+		}
+	}(conn)
+
+	// Send the checkpoint files over the connection
+	for _, file := range files {
+		// Open the file for reading
+		filePath := filepath.Join(dir, file.Name())
+		f, err := os.Open(filePath)
+		if err != nil {
+			klog.ErrorS(err, "failed to open file", "file", filePath)
+			return err
+		}
+		defer func(f *os.File) {
+			err := f.Close()
+			if err != nil {
+
+			}
+		}(f)
+
+		// Read the file data and send it over the connection
+		buffer := make([]byte, 1024)
+		for {
+			n, err := f.Read(buffer)
+			if err != nil && err != io.EOF {
+				klog.ErrorS(err, "failed to read file", "file", filePath)
+				return err
+			}
+			if n == 0 {
+				break
+			}
+
+			_, err = conn.Write(buffer[:n])
+			if err != nil {
+				klog.ErrorS(err, "failed to write file data to remote cluster gateway", "file", filePath)
+				return err
+			}
+		}
+
+		// Signal the end of the file by writing an empty message
+		_, err = conn.Write([]byte{})
+		if err != nil {
+			klog.ErrorS(err, "failed to write file data to remote cluster gateway", "file", filePath)
+			return err
+		}
+	}
+
+	return nil
 }
