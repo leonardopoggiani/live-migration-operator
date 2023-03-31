@@ -8,7 +8,7 @@ require (
 	github.com/emicklei/go-restful/v3 v3.10.2
 	github.com/leonardopoggiani/live-migration-operator/storage-provisioner v0.0.0-20230329142017-ea5fb4b4493e
 	github.com/onsi/ginkgo/v2 v2.9.2
-	github.com/onsi/gomega v1.27.5
+	github.com/onsi/gomega v1.27.6
 	k8s.io/api v0.26.3
 	k8s.io/apimachinery v0.26.3
 	k8s.io/client-go v0.26.3
