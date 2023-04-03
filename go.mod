@@ -1,6 +1,6 @@
 module github.com/leonardopoggiani/live-migration-operator
 
-go 1.20
+go 1.19
 
 require (
 	github.com/containers/buildah v1.30.0
