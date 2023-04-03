@@ -18,18 +18,6 @@ import (
 	"time"
 )
 
-const (
-	port     = 12345
-	buffSize = 1024
-)
-
-var (
-	// PingLossThreshold is the number of lost packets after which the connection check is considered as failed.
-	PingLossThreshold uint
-	// PingInterval is the interval at which the ping is sent.
-	PingInterval time.Duration
-)
-
 type CheckpointProvisioner struct {
 	client                  client.Client
 	virtualStorageClassName string
