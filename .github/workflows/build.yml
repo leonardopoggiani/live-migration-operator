@@ -91,14 +91,6 @@ jobs:
       - name: Go Build
         run: go build -o live-migration-operator .
 
-      - name: Docker Build Storage Provisioner
-        run: docker build -t docker.io/leonardopoggiani/checkpoint-provisioner -f storage-provisioner/Dockerfile .
-
-      - name: Docker Push Storage Provisioner
-        run: |
-          docker login -u leonardopoggiani -p ${{ secrets.DOCKERHUB_TOKEN }}
-          docker push docker.io/leonardopoggiani/checkpoint-provisioner
-
       - name: Go Compile Tests
         if: ${{ inputs.skipTests }}
         run: go test -exec /bin/true ./...
@@ -110,3 +102,18 @@ jobs:
       - name: Go Benchmark
         if: ${{ !inputs.skipTests }}
         run: go test -v -shuffle=on -run=- -bench=. -benchtime=1x ./...
+
+      - name: Docker Build
+        run: docker build --build-arg GITHUB_TOKEN ${{ secrets.TOKEN }} -t docker.io/leonardopoggiani/live-migration-operator:latest .
+
+      - name: Docker Push
+        run: |
+          docker login -u leonardopoggiani -p ${{ secrets.DOCKERHUB_TOKEN }}
+          docker push docker.io/leonardopoggiani/live-migration-operator:latest
+
+      - name: Docker Build Storage Provisioner
+        run: docker build -t docker.io/leonardopoggiani/checkpoint-provisioner -f storage-provisioner/Dockerfile .
+
+      - name: Docker Push Storage Provisioner
+        run: |
+          docker push docker.io/leonardopoggiani/checkpoint-provisioner

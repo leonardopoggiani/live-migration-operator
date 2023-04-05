@@ -70,7 +70,7 @@ func (c CheckpointProvisioner) Provision(ctx context.Context, options controller
 	// need to open a socket to the liqo gateway service on the remote cluster
 	// remote gateway service address
 
-	client := &http.Client{
+	httpClient := &http.Client{
 		Timeout: time.Second * 10,
 	}
 	// req, err := http.NewRequestWithContext(context.Background(), "POST", "http://dummy-service.liqo-demo.svc.cluster.local:80/checkpoint", nil)
@@ -104,11 +104,17 @@ func (c CheckpointProvisioner) Provision(ctx context.Context, options controller
 		req.Header.Set("Content-Type", "application/octet-stream")
 
 		// Send the request and handle the response
-		resp, err := client.Do(req)
+		resp, err := httpClient.Do(req)
 		if err != nil {
 			klog.ErrorS(err, "failed to send request")
 		}
-		defer resp.Body.Close()
+		// possible resource leak
+		defer func(Body io.ReadCloser) {
+			err := Body.Close()
+			if err != nil {
+
+			}
+		}(resp.Body)
 
 		if resp.StatusCode != http.StatusOK {
 			klog.ErrorS(nil, "failed to send file", "status", resp.StatusCode)
