@@ -4,7 +4,7 @@ go 1.20
 
 require (
 	github.com/containers/buildah v1.26.2
-	github.com/containers/storage v1.46.0
+	github.com/containers/storage v1.46.1
 	github.com/emicklei/go-restful/v3 v3.10.2
 	github.com/leonardopoggiani/live-migration-operator/storage-provisioner v0.0.0-20230403081632-e0b1b084805e
 	github.com/onsi/ginkgo/v2 v2.9.2
@@ -74,7 +74,7 @@ require (
 	github.com/jinzhu/copier v0.3.5 // indirect
 	github.com/josharian/intern v1.0.0 // indirect
 	github.com/json-iterator/go v1.1.12 // indirect
-	github.com/klauspost/compress v1.16.3 // indirect
+	github.com/klauspost/compress v1.16.4 // indirect
 	github.com/klauspost/pgzip v1.2.6-0.20220930104621-17e8dac29df8 // indirect
 	github.com/mailru/easyjson v0.7.7 // indirect
 	github.com/manifoldco/promptui v0.9.0 // indirect
