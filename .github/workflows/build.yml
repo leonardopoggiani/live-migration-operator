@@ -104,7 +104,7 @@ jobs:
         run: go test -v -shuffle=on -run=- -bench=. -benchtime=1x ./...
 
       - name: Docker Build
-        run: docker build --build-arg GITHUB_TOKEN ${{ secrets.TOKEN }} -t docker.io/leonardopoggiani/live-migration-operator:latest .
+        run: docker build --build-arg GITHUB_TOKEN=${{ secrets.TOKEN }} -t docker.io/leonardopoggiani/live-migration-operator:latest .
 
       - name: Docker Push
         run: |

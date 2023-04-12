@@ -13,21 +13,11 @@ RUN apt update && \
     apt install -y libbtrfs-dev libdevmapper-dev libgpgme-dev libseccomp-dev
 
 RUN echo "machine github.com login $GITHUB_TOKEN" > ~/.netrc && \
-    chmod 600 ~/.netrc
-
-RUN go env -w GOPRIVATE=github.com/leonardopoggiani/* && \
-    rm go.sum && \
-    rm go.mod && \
-    go clean -modcache && \
-    go mod init github.com/leonardopoggiani/live-migration-operator && \
-    go mod tidy
+    chmod 600 ~/.netrc && \
+    go env -w GOPRIVATE=github.com/leonardopoggiani/*
 
 RUN go get -u github.com/leonardopoggiani/live-migration-operator && \
-    go get -u github.com/leonardopoggiani/live-migration-operator/storage-provisioner && \
-    go get -u github.com/Microsoft/hcsshim && \
-    go get github.com/docker/distribution/metrics@v2.8.1+incompatible && \
-    go get github.com/containers/buildah
-
+    go get -u github.com/leonardopoggiani/live-migration-operator/storage-provisioner
 
 RUN go build -mod=readonly -o live-migration-operator ./api-server/cmd/main.go
 

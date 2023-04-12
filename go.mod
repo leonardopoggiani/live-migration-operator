@@ -6,7 +6,6 @@ require (
 	github.com/containers/buildah v1.30.0
 	github.com/containers/storage v1.46.1
 	github.com/emicklei/go-restful/v3 v3.10.2
-	github.com/leonardopoggiani/live-migration-operator/storage-provisioner v0.0.0-20230403081632-e0b1b084805e
 	github.com/onsi/ginkgo/v2 v2.9.2
 	github.com/onsi/gomega v1.27.6
 	k8s.io/api v0.26.3
@@ -14,6 +13,7 @@ require (
 	k8s.io/client-go v0.26.3
 	k8s.io/klog/v2 v2.90.1
 	sigs.k8s.io/controller-runtime v0.14.6
+	sigs.k8s.io/sig-storage-lib-external-provisioner/v7 v7.0.1
 )
 
 require (
@@ -65,7 +65,7 @@ require (
 	github.com/gogo/protobuf v1.3.2 // indirect
 	github.com/golang/groupcache v0.0.0-20210331224755-41bb18bfe9da // indirect
 	github.com/golang/protobuf v1.5.3 // indirect
-	github.com/google/gnostic v0.6.9 // indirect
+	github.com/google/gnostic v0.5.7-v3refs // indirect
 	github.com/google/go-cmp v0.5.9 // indirect
 	github.com/google/go-containerregistry v0.13.0 // indirect
 	github.com/google/go-intervals v0.0.2 // indirect
@@ -168,7 +168,6 @@ require (
 	k8s.io/kube-openapi v0.0.0-20230308215209-15aac26d736a // indirect
 	k8s.io/utils v0.0.0-20230220204549-a5ecb0141aa5 // indirect
 	sigs.k8s.io/json v0.0.0-20221116044647-bc3834ca7abd // indirect
-	sigs.k8s.io/sig-storage-lib-external-provisioner/v7 v7.0.1 // indirect
 	sigs.k8s.io/structured-merge-diff/v4 v4.2.3 // indirect
 	sigs.k8s.io/yaml v1.3.0 // indirect
 )

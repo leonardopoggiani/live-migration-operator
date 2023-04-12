@@ -8,18 +8,18 @@ import (
 	livemigrationv1 "github.com/leonardopoggiani/live-migration-operator/api/v1alpha1"
 	"github.com/leonardopoggiani/live-migration-operator/controllers"
 	storageprovisioner "github.com/leonardopoggiani/live-migration-operator/storage-provisioner"
+	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/client-go/kubernetes"
+	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
+	"k8s.io/client-go/tools/clientcmd"
 	"k8s.io/klog/v2"
 	"os"
-
-	"k8s.io/apimachinery/pkg/runtime"
-	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	ctrl "sigs.k8s.io/controller-runtime"
-	kubelog "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
+	"sigs.k8s.io/sig-storage-lib-external-provisioner/v7/controller"
 )
 
 var (
-	runLog = kubelog.Log.WithName("livemigration-cp").WithName("run")
 	scheme = runtime.NewScheme()
 )
 
@@ -65,13 +65,39 @@ func main() {
 	if err != nil {
 		klog.Error(err, "unable to create controller", "controller", "CheckpointProvisioner")
 		os.Exit(1)
+	}
+
+	kubeconfigPath := os.Getenv("KUBECONFIG")
+	if kubeconfigPath == "" {
+		kubeconfigPath = "~/.kube/config"
+	}
+
+	kubeconfigPath = os.ExpandEnv(kubeconfigPath)
+	if _, err := os.Stat(kubeconfigPath); os.IsNotExist(err) {
+		klog.ErrorS(err, "kubeconfig file not existing")
+	}
+
+	kubeconfig, err := clientcmd.BuildConfigFromFlags("", kubeconfigPath)
+	if err != nil {
+		klog.ErrorS(err, "Failed to retrieve kubeconfig")
+	}
+
+	// Create Kubernetes API client
+	clientset, err := kubernetes.NewForConfig(kubeconfig)
+	if err != nil {
+		klog.ErrorS(err, "failed to create Kubernetes client")
+	}
+
+	provisionController := controller.NewProvisionController(clientset, "checkpoint-provisioner", prov, controller.LeaderElection(false))
+	err = mgr.Add(storageprovisioner.StorageControllerRunnable{
+		Ctrl: provisionController,
+	})
+
+	if err != nil {
+		klog.Fatal(err)
 	} else {
-		err = storageprovisioner.SetupWithManager(mgr)
-		if err != nil {
-			klog.ErrorS(err, "unable to create controller", "controller", "CheckpointProvisioner")
-			os.Exit(1)
-		}
-		klog.Infof("", "CheckpointProvisioner created", prov)
+		klog.Info("Checkpoint provisioner controller started")
+		klog.Infof("controller hasRun -> %v", provisionController.HasRun())
 	}
 
 	if err = (&controllers.LiveMigrationReconciler{
