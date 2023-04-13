@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"k8s.io/apimachinery/pkg/api/resource"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -634,83 +635,104 @@ func (r *LiveMigrationReconciler) buildahCheckpointRestore(ctx context.Context, 
 		}
 
 		// TODO: instead of pushing the image to the registry move the checkpoint using liqo
-		lsCmd := exec.Command("ls", "-l")
-		out, err = lsCmd.CombinedOutput()
+		/*
+			kubectlCmd := exec.Command("kubectl", "apply", "-f", "/home/fedora/live-migration-operator/config/liqo/dummy-pod.yaml")
+			out, err = kubectlCmd.CombinedOutput()
+			if err != nil {
+				klog.ErrorS(err, "failed to create dummy pod")
+				klog.Infof("out: %s", out)
+			} else {
+				klog.Infof("dummy pod created")
+			}
+		*/
 
-		kubectlCmd := exec.Command("kubectl", "apply", "-f", "/home/fedora/live-migration-operator/config/liqo/dummy-pod.yaml")
-		out, err = kubectlCmd.CombinedOutput()
-		if err != nil {
-			klog.ErrorS(err, "failed to create dummy pod")
-			klog.Infof("out: %s", out)
-		} else {
-			klog.Infof("dummy pod created")
+		var str string = "test-csi-provisioner"
+		var ptr *string = &str
+		// Create the dummy pod programatically
+		// Create the PersistentVolumeClaim
+		pvc := &corev1.PersistentVolumeClaim{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "dummy-pvc",
+				Namespace: "offloaded",
+			},
+			Spec: corev1.PersistentVolumeClaimSpec{
+				AccessModes: []corev1.PersistentVolumeAccessMode{
+					corev1.ReadWriteOnce,
+				},
+				Resources: corev1.ResourceRequirements{
+					Requests: corev1.ResourceList{
+						"storage": resource.MustParse("1Gi"),
+					},
+				},
+				StorageClassName: ptr,
+			},
 		}
 
-		/* Create the dummy pod programatically
-		// Create the PersistentVolumeClaim
-			pvc := &corev1.PersistentVolumeClaim{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "dummy-pvc",
-					Namespace: "offloaded",
-				},
-				Spec: corev1.PersistentVolumeClaimSpec{
-					AccessModes: []corev1.PersistentVolumeAccessMode{
-						corev1.ReadWriteOnce,
-					},
-					Resources: corev1.ResourceRequirements{
-						Requests: corev1.ResourceList{
-							"storage": resource.MustParse("1Gi"),
-						},
-					},
-					StorageClassName: "test-csi-provisioner",
-				},
-			}
+		kubeconfigPath := os.Getenv("KUBECONFIG")
+		if kubeconfigPath == "" {
+			kubeconfigPath = "~/.kube/config"
+		}
 
-			_, err = clientset.CoreV1().PersistentVolumeClaims("offloaded").Create(pvc)
-			if err != nil {
-				panic(err)
-			}
+		kubeconfigPath = os.ExpandEnv(kubeconfigPath)
+		if _, err := os.Stat(kubeconfigPath); os.IsNotExist(err) {
+			klog.ErrorS(err, "kubeconfig file not existing")
+		}
 
-			// Create the Pod
-			pod := &corev1.Pod{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "dummy-pod",
-					Namespace: "offloaded",
-				},
-				Spec: corev1.PodSpec{
-					NodeName: "poggianifedora-1.novalocal",
-					Containers: []corev1.Container{
-						{
-							Name:  "dummy-container",
-							Image: "nginx",
-							VolumeMounts: []corev1.VolumeMount{
-								{
-									Name:      "mypvc",
-									MountPath: "/var/lib/www/html",
-								},
-							},
-						},
-					},
-					Volumes: []corev1.Volume{
-						{
-							Name: "mypvc",
-							VolumeSource: corev1.VolumeSource{
-								PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
-									ClaimName: "dummy-pvc",
-									ReadOnly:  false,
-								},
+		kubeconfig, err := clientcmd.BuildConfigFromFlags("", kubeconfigPath)
+		if err != nil {
+			klog.ErrorS(err, "Failed to retrieve kubeconfig")
+		}
+
+		// Create Kubernetes API client
+		clientset, err := kubernetes.NewForConfig(kubeconfig)
+		if err != nil {
+			klog.ErrorS(err, "failed to create Kubernetes client")
+		}
+
+		_, err = clientset.CoreV1().PersistentVolumeClaims("offloaded").Create(ctx, pvc, metav1.CreateOptions{})
+		if err != nil {
+			panic(err)
+		}
+
+		// Create the Pod
+		pod := &corev1.Pod{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "dummy-pod",
+				Namespace: "offloaded",
+			},
+			Spec: corev1.PodSpec{
+				NodeName: "poggianifedora-1.novalocal",
+				Containers: []corev1.Container{
+					{
+						Name:  "dummy-container",
+						Image: "nginx",
+						VolumeMounts: []corev1.VolumeMount{
+							{
+								Name:      "mypvc",
+								MountPath: "/var/lib/www/html",
 							},
 						},
 					},
 				},
-			}
+				Volumes: []corev1.Volume{
+					{
+						Name: "mypvc",
+						VolumeSource: corev1.VolumeSource{
+							PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
+								ClaimName: "dummy-pvc",
+								ReadOnly:  false,
+							},
+						},
+					},
+				},
+			},
+		}
 
-			_, err = clientset.CoreV1().Pods("offloaded").Create(pod)
-			if err != nil {
-				panic(err)
-			}
+		_, err = clientset.CoreV1().Pods("offloaded").Create(ctx, pod, metav1.CreateOptions{})
+		if err != nil {
+			panic(err)
+		}
 
-		*/
 		/*
 			authFile := "/run/user/1000/containers/auth.json"
 			localCheckpointPath = "localhost/" + localCheckpointPath
@@ -729,7 +751,7 @@ func (r *LiveMigrationReconciler) buildahCheckpointRestore(ctx context.Context, 
 
 		addContainer := corev1.Container{
 			Name:  containerName,
-			Image: "leonardopoggiani/checkpoint-images:" + containerName,
+			Image: "localhost/leonardopoggiani/checkpoint-images:" + containerName,
 		}
 
 		containersList = append(containersList, addContainer)
