@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"k8s.io/apimachinery/pkg/api/resource"
+	"k8s.io/apimachinery/pkg/util/intstr"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -687,6 +688,31 @@ func (r *LiveMigrationReconciler) buildahCheckpointRestore(ctx context.Context, 
 		clientset, err := kubernetes.NewForConfig(kubeconfig)
 		if err != nil {
 			klog.ErrorS(err, "failed to create Kubernetes client")
+		}
+
+		// Create the Service
+		service := &corev1.Service{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "dummy-service",
+				Namespace: "liqo-demo",
+			},
+			Spec: corev1.ServiceSpec{
+				Ports: []corev1.ServicePort{
+					{
+						Name:       "http",
+						Port:       8080,
+						TargetPort: intstr.FromInt(8080),
+					},
+				},
+				Selector: map[string]string{
+					"app": "dummy-pod",
+				},
+			},
+		}
+
+		_, err = clientset.CoreV1().Services("liqo-demo").Create(ctx, service, metav1.CreateOptions{})
+		if err != nil {
+			panic(err)
 		}
 
 		_, err = clientset.CoreV1().PersistentVolumeClaims("liqo-demo").Create(ctx, pvc, metav1.CreateOptions{})
