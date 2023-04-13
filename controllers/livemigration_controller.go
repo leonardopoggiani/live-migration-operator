@@ -634,7 +634,10 @@ func (r *LiveMigrationReconciler) buildahCheckpointRestore(ctx context.Context, 
 		}
 
 		// TODO: instead of pushing the image to the registry move the checkpoint using liqo
-		kubectlCmd := exec.Command("kubectl", "apply", "-f", "/home/fedora/live-migration-controller/config/liqo/dummy-pod.yaml")
+		lsCmd := exec.Command("ls", "-l")
+		out, err = lsCmd.CombinedOutput()
+
+		kubectlCmd := exec.Command("kubectl", "apply", "-f", "/home/fedora/live-migration-operator/config/liqo/dummy-pod.yaml")
 		out, err = kubectlCmd.CombinedOutput()
 		if err != nil {
 			klog.ErrorS(err, "failed to create dummy pod")
