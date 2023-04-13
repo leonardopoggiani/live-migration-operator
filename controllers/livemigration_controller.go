@@ -145,26 +145,38 @@ func (r *LiveMigrationReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 		containers, err := PrintContainerIDs(clientset, req.Namespace)
 		pathToClear := "/tmp/checkpoints/checkpoints"
 
-		err = os.Chmod(pathToClear, 0777)
-		if err != nil {
-			klog.ErrorS(err, "unable to change checkpoint folder permission")
-		} else {
-			klog.InfoS("changed checkpoint folder permission")
-		}
+		/*
+			err = os.Chmod(pathToClear, 0777)
+			if err != nil {
+				klog.ErrorS(err, "unable to change checkpoint folder permission")
+			} else {
+				klog.InfoS("changed checkpoint folder permission")
+			}
 
-		if _, err = exec.Command("sudo", "rm", "-rf", pathToClear).CombinedOutput(); err != nil {
-			klog.ErrorS(err, "unable to delete checkpoint folder")
-		} else {
-			klog.InfoS("deleted checkpoint folder")
-		}
+			if _, err = exec.Command("sudo", "rm", "-rf", pathToClear).CombinedOutput(); err != nil {
+				klog.ErrorS(err, "unable to delete checkpoint folder")
+			} else {
+				klog.InfoS("deleted checkpoint folder")
+			}
+		*/
 
-		err = os.Mkdir(pathToClear, 0777)
+		// Get the current user's UID and GID
+		uid := os.Getuid()
+		gid := os.Getgid()
+
+		// Change the ownership of the directory to the current user
+		err = os.Mkdir(pathToClear, 0770)
 		if err != nil {
 			return ctrl.Result{}, err
 		}
 		err = r.checkpointPodCrio(containers, req.Namespace, migratingPod.Name)
 		if err != nil {
 			klog.ErrorS(err, "unable to checkpoint")
+		}
+
+		err = os.Chown(pathToClear, uid, gid)
+		if err != nil {
+			klog.ErrorS(err, "unable to change checkpoint folder permission")
 		}
 	}
 
