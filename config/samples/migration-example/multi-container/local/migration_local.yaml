@@ -8,19 +8,19 @@
 apiVersion: livemigration.liqo.io/v1alpha1
 kind: LiveMigration
 metadata:
-  name: multi-container-pod
+  name: tomcat-pod
   namespace: liqo-demo
   labels:
-    app: multi-container-pod
+    app: tomcat-pod
 spec:
   replicas: 1
   action: live-migration
   # snapshotPath: /var/lib/kubelet/migration
-  sourcePod: multi-container-pod
-  destHost: leonardo-controller
+  sourcePod: tomcat-pod
+  destHost: poggianifedora-2.novalocal
   selector:
     matchLabels:
-      app: multi-container-pod
+      app: tomcat
       namespace: liqo-demo
   # template:
   #   metadata:
