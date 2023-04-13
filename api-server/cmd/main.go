@@ -5,6 +5,7 @@ import (
 	"github.com/containers/buildah"
 	"github.com/containers/storage/pkg/unshare"
 	livemigrationv1 "github.com/leonardopoggiani/live-migration-operator/api/v1alpha1"
+	"github.com/leonardopoggiani/live-migration-operator/controllers"
 	"k8s.io/apimachinery/pkg/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/klog/v2"
@@ -95,14 +96,15 @@ func main() {
 			klog.Infof("controller hasRun -> %v", provisionController.HasRun())
 		}
 
-		if err = (&controllers.LiveMigrationReconciler{
-			Client: mgr.GetClient(),
-			Scheme: mgr.GetScheme(),
-		}).SetupWithManager(mgr); err != nil {
-			os.Exit(1)
-		}
-
 	*/
+
+	if err = (&controllers.LiveMigrationReconciler{
+		Client: mgr.GetClient(),
+		Scheme: mgr.GetScheme(),
+	}).SetupWithManager(mgr); err != nil {
+		os.Exit(1)
+	}
+	
 	// +kubebuilder:scaffold:builder
 
 	if err := mgr.Start(ctrl.SetupSignalHandler()); err != nil {
