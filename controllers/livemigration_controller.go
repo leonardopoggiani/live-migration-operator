@@ -653,7 +653,7 @@ func (r *LiveMigrationReconciler) buildahCheckpointRestore(ctx context.Context, 
 		pvc := &corev1.PersistentVolumeClaim{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      "dummy-pvc",
-				Namespace: "offloaded",
+				Namespace: "liqo-demo",
 			},
 			Spec: corev1.PersistentVolumeClaimSpec{
 				AccessModes: []corev1.PersistentVolumeAccessMode{
@@ -689,7 +689,7 @@ func (r *LiveMigrationReconciler) buildahCheckpointRestore(ctx context.Context, 
 			klog.ErrorS(err, "failed to create Kubernetes client")
 		}
 
-		_, err = clientset.CoreV1().PersistentVolumeClaims("offloaded").Create(ctx, pvc, metav1.CreateOptions{})
+		_, err = clientset.CoreV1().PersistentVolumeClaims("liqo-demo").Create(ctx, pvc, metav1.CreateOptions{})
 		if err != nil {
 			panic(err)
 		}
@@ -698,7 +698,7 @@ func (r *LiveMigrationReconciler) buildahCheckpointRestore(ctx context.Context, 
 		pod := &corev1.Pod{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      "dummy-pod",
-				Namespace: "offloaded",
+				Namespace: "liqo-demo",
 			},
 			Spec: corev1.PodSpec{
 				NodeName: "poggianifedora-1.novalocal",
@@ -728,7 +728,7 @@ func (r *LiveMigrationReconciler) buildahCheckpointRestore(ctx context.Context, 
 			},
 		}
 
-		_, err = clientset.CoreV1().Pods("offloaded").Create(ctx, pod, metav1.CreateOptions{})
+		_, err = clientset.CoreV1().Pods("liqo-demo").Create(ctx, pod, metav1.CreateOptions{})
 		if err != nil {
 			panic(err)
 		}
