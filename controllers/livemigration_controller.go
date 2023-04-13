@@ -633,22 +633,99 @@ func (r *LiveMigrationReconciler) buildahCheckpointRestore(ctx context.Context, 
 			klog.Infof("out: %s", out)
 		}
 
-		authFile := "/run/user/1000/containers/auth.json"
-		localCheckpointPath = "localhost/" + localCheckpointPath
-		remoteCheckpointPath := "docker.io/leonardopoggiani/checkpoint-images:" + containerName
-		pushCheckpointCmd := exec.Command("sudo", "buildah", "push", "--authfile", authFile, localCheckpointPath, remoteCheckpointPath)
-		klog.Infof(pushCheckpointCmd.String())
-		if err = pushCheckpointCmd.Run(); err != nil {
-			klog.ErrorS(err, "failed to push checkpoint")
-		} else {
-			klog.Infof("", "pushed image")
+		// TODO: instead of pushing the image to the registry move the checkpoint using liqo
+
+		kubectlCmd := exec.Command("kubectl", "apply", "-f", "config/liqo/dummy-pod.yaml")
+		out, err = kubectlCmd.CombinedOutput()
+		if err != nil {
+			klog.ErrorS(err, "failed to create dummy pod")
+			klog.Infof("out: %s", out)
 		}
 
-		klog.Infof("", "newPod", podName)
+		/* Create the dummy pod programatically
+		// Create the PersistentVolumeClaim
+			pvc := &corev1.PersistentVolumeClaim{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "dummy-pvc",
+					Namespace: "offloaded",
+				},
+				Spec: corev1.PersistentVolumeClaimSpec{
+					AccessModes: []corev1.PersistentVolumeAccessMode{
+						corev1.ReadWriteOnce,
+					},
+					Resources: corev1.ResourceRequirements{
+						Requests: corev1.ResourceList{
+							"storage": resource.MustParse("1Gi"),
+						},
+					},
+					StorageClassName: "test-csi-provisioner",
+				},
+			}
+
+			_, err = clientset.CoreV1().PersistentVolumeClaims("offloaded").Create(pvc)
+			if err != nil {
+				panic(err)
+			}
+
+			// Create the Pod
+			pod := &corev1.Pod{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "dummy-pod",
+					Namespace: "offloaded",
+				},
+				Spec: corev1.PodSpec{
+					NodeName: "poggianifedora-1.novalocal",
+					Containers: []corev1.Container{
+						{
+							Name:  "dummy-container",
+							Image: "nginx",
+							VolumeMounts: []corev1.VolumeMount{
+								{
+									Name:      "mypvc",
+									MountPath: "/var/lib/www/html",
+								},
+							},
+						},
+					},
+					Volumes: []corev1.Volume{
+						{
+							Name: "mypvc",
+							VolumeSource: corev1.VolumeSource{
+								PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
+									ClaimName: "dummy-pvc",
+									ReadOnly:  false,
+								},
+							},
+						},
+					},
+				},
+			}
+
+			_, err = clientset.CoreV1().Pods("offloaded").Create(pod)
+			if err != nil {
+				panic(err)
+			}
+
+		*/
+		/*
+			authFile := "/run/user/1000/containers/auth.json"
+			localCheckpointPath = "localhost/" + localCheckpointPath
+			remoteCheckpointPath := "docker.io/leonardopoggiani/checkpoint-images:" + containerName
+			pushCheckpointCmd := exec.Command("sudo", "buildah", "push", "--authfile", authFile, localCheckpointPath, remoteCheckpointPath)
+			klog.Infof(pushCheckpointCmd.String())
+			if err = pushCheckpointCmd.Run(); err != nil {
+				klog.ErrorS(err, "failed to push checkpoint")
+			} else {
+				klog.Infof("", "pushed image")
+			}
+
+			klog.Infof("", "newPod", podName)
+
+		*/
 
 		addContainer := corev1.Container{
 			Name:  containerName,
-			Image: "docker.io/leonardopoggiani/checkpoint-images:" + containerName,
+			Image: "leonardopoggiani/checkpoint-images:" + containerName,
 		}
 
 		containersList = append(containersList, addContainer)
