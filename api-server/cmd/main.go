@@ -1,22 +1,16 @@
 package main
 
 import (
-	"context"
 	"flag"
 	"github.com/containers/buildah"
 	"github.com/containers/storage/pkg/unshare"
 	livemigrationv1 "github.com/leonardopoggiani/live-migration-operator/api/v1alpha1"
-	"github.com/leonardopoggiani/live-migration-operator/controllers"
-	storageprovisioner "github.com/leonardopoggiani/live-migration-operator/storage-provisioner"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/client-go/kubernetes"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
-	"k8s.io/client-go/tools/clientcmd"
 	"k8s.io/klog/v2"
 	"os"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
-	"sigs.k8s.io/sig-storage-lib-external-provisioner/v7/controller"
 )
 
 var (
@@ -61,51 +55,54 @@ func main() {
 
 	klog.Infof("Starting the LiveMigration controller manager")
 
-	prov, err := storageprovisioner.NewCheckpointProvisioner(context.Background(), mgr.GetClient(), "liqo-demo-storage")
-	if err != nil {
-		klog.Error(err, "unable to create controller", "controller", "CheckpointProvisioner")
-		os.Exit(1)
-	}
+	/*
+		prov, err := storageprovisioner.NewCheckpointProvisioner(context.Background(), mgr.GetClient(), "liqo-demo-storage")
+		if err != nil {
+			klog.Error(err, "unable to create controller", "controller", "CheckpointProvisioner")
+			os.Exit(1)
+		}
 
-	kubeconfigPath := os.Getenv("KUBECONFIG")
-	if kubeconfigPath == "" {
-		kubeconfigPath = "~/.kube/config"
-	}
+		kubeconfigPath := os.Getenv("KUBECONFIG")
+		if kubeconfigPath == "" {
+			kubeconfigPath = "~/.kube/config"
+		}
 
-	kubeconfigPath = os.ExpandEnv(kubeconfigPath)
-	if _, err := os.Stat(kubeconfigPath); os.IsNotExist(err) {
-		klog.ErrorS(err, "kubeconfig file not existing")
-	}
+		kubeconfigPath = os.ExpandEnv(kubeconfigPath)
+		if _, err := os.Stat(kubeconfigPath); os.IsNotExist(err) {
+			klog.ErrorS(err, "kubeconfig file not existing")
+		}
 
-	kubeconfig, err := clientcmd.BuildConfigFromFlags("", kubeconfigPath)
-	if err != nil {
-		klog.ErrorS(err, "Failed to retrieve kubeconfig")
-	}
+		kubeconfig, err := clientcmd.BuildConfigFromFlags("", kubeconfigPath)
+		if err != nil {
+			klog.ErrorS(err, "Failed to retrieve kubeconfig")
+		}
 
-	// Create Kubernetes API client
-	clientset, err := kubernetes.NewForConfig(kubeconfig)
-	if err != nil {
-		klog.ErrorS(err, "failed to create Kubernetes client")
-	}
+		// Create Kubernetes API client
+		clientset, err := kubernetes.NewForConfig(kubeconfig)
+		if err != nil {
+			klog.ErrorS(err, "failed to create Kubernetes client")
+		}
 
-	provisionController := controller.NewProvisionController(clientset, "checkpoint-provisioner", prov, controller.LeaderElection(false))
-	err = mgr.Add(storageprovisioner.StorageControllerRunnable{
-		Ctrl: provisionController,
-	})
+		provisionController := controller.NewProvisionController(clientset, "checkpoint-provisioner", prov, controller.LeaderElection(false))
+		err = mgr.Add(storageprovisioner.StorageControllerRunnable{
+			Ctrl: provisionController,
+		})
 
-	if err != nil {
-		klog.Fatal(err)
-	} else {
-		klog.Info("Checkpoint provisioner controller started")
-		klog.Infof("controller hasRun -> %v", provisionController.HasRun())
-	}
+		if err != nil {
+			klog.Fatal(err)
+		} else {
+			klog.Info("Checkpoint provisioner controller started")
+			klog.Infof("controller hasRun -> %v", provisionController.HasRun())
+		}
 
-	if err = (&controllers.LiveMigrationReconciler{
-		Client: mgr.GetClient(),
-		Scheme: mgr.GetScheme(),
-	}).SetupWithManager(mgr); err != nil {
-		os.Exit(1)
-	}
+		if err = (&controllers.LiveMigrationReconciler{
+			Client: mgr.GetClient(),
+			Scheme: mgr.GetScheme(),
+		}).SetupWithManager(mgr); err != nil {
+			os.Exit(1)
+		}
+
+	*/
 	// +kubebuilder:scaffold:builder
 
 	if err := mgr.Start(ctrl.SetupSignalHandler()); err != nil {
