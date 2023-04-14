@@ -722,6 +722,28 @@ func (r *LiveMigrationReconciler) buildahCheckpointRestore(ctx context.Context, 
 			},
 		}
 
+		/*
+			service := &corev1.Service{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "dummy-service",
+					Namespace: "liqo-demo",
+				},
+				Spec: corev1.ServiceSpec{
+					Ports: []corev1.ServicePort{
+						{
+							Name:       "http",
+							Port:       8080,
+							TargetPort: intstr.FromInt(8080),
+						},
+					},
+					Selector: map[string]string{
+						"app": "dummy-pod",
+					},
+				},
+			}
+
+		*/
+
 		_, err = clientset.CoreV1().Services("liqo-demo").Create(ctx, service, metav1.CreateOptions{})
 		if err != nil {
 			panic(err)
@@ -765,6 +787,41 @@ func (r *LiveMigrationReconciler) buildahCheckpointRestore(ctx context.Context, 
 				},
 			},
 		}
+
+		/*
+			pod := &corev1.Pod{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "dummy-pod",
+					Namespace: "liqo-demo",
+				},
+				Spec: corev1.PodSpec{
+					NodeName: "poggianifedora-1.novalocal",
+					Containers: []corev1.Container{
+						{
+							Name:  "dummy-container",
+							Image: "nginx",
+							VolumeMounts: []corev1.VolumeMount{
+								{
+									Name:      "mypvc",
+									MountPath: "/var/lib/www/html",
+								},
+							},
+						},
+					},
+					Volumes: []corev1.Volume{
+						{
+							Name: "mypvc",
+							VolumeSource: corev1.VolumeSource{
+								PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
+									ClaimName: "dummy-pvc",
+									ReadOnly:  false,
+								},
+							},
+						},
+					},
+				},
+			}
+		*/
 
 		_, err = clientset.CoreV1().Pods("liqo-demo").Create(ctx, pod, metav1.CreateOptions{})
 		if err != nil {
