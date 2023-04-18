@@ -720,7 +720,12 @@ func (r *LiveMigrationReconciler) buildahCheckpointRestore(ctx context.Context, 
 
 		_, err = clientset.CoreV1().Pods("default").Create(ctx, pod, metav1.CreateOptions{})
 		if err != nil {
-			panic(err)
+			klog.ErrorS(err, "failed to create pod")
+		}
+
+		err = r.waitForContainerReady(pod.Name, "default", "dummy-container", clientset)
+		if err != nil {
+			klog.ErrorS(err, "failed to wait for container ready")
 		}
 
 		service := &corev1.Service{
