@@ -677,7 +677,7 @@ func (r *LiveMigrationReconciler) buildahCheckpointRestore(ctx context.Context, 
 		pvc := &corev1.PersistentVolumeClaim{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      "dummy-pvc",
-				Namespace: "liqo-demo",
+				Namespace: "default",
 			},
 			Spec: corev1.PersistentVolumeClaimSpec{
 				AccessModes: []corev1.PersistentVolumeAccessMode{
@@ -717,7 +717,7 @@ func (r *LiveMigrationReconciler) buildahCheckpointRestore(ctx context.Context, 
 		service := &corev1.Service{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      "dummy-service",
-				Namespace: "liqo-demo",
+				Namespace: "default",
 			},
 			Spec: corev1.ServiceSpec{
 				Ports: []corev1.ServicePort{
@@ -755,12 +755,12 @@ func (r *LiveMigrationReconciler) buildahCheckpointRestore(ctx context.Context, 
 
 		*/
 
-		_, err = clientset.CoreV1().Services("liqo-demo").Create(ctx, service, metav1.CreateOptions{})
+		_, err = clientset.CoreV1().Services("default").Create(ctx, service, metav1.CreateOptions{})
 		if err != nil {
 			panic(err)
 		}
 
-		_, err = clientset.CoreV1().PersistentVolumeClaims("liqo-demo").Create(ctx, pvc, metav1.CreateOptions{})
+		_, err = clientset.CoreV1().PersistentVolumeClaims("default").Create(ctx, pvc, metav1.CreateOptions{})
 		if err != nil {
 			panic(err)
 		}
@@ -769,7 +769,7 @@ func (r *LiveMigrationReconciler) buildahCheckpointRestore(ctx context.Context, 
 		pod := &corev1.Pod{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      "dummy-pod",
-				Namespace: "liqo-demo",
+				Namespace: "default",
 			},
 			Spec: corev1.PodSpec{
 				NodeName: "poggianifedora-1.novalocal",
@@ -834,7 +834,7 @@ func (r *LiveMigrationReconciler) buildahCheckpointRestore(ctx context.Context, 
 			}
 		*/
 
-		_, err = clientset.CoreV1().Pods("liqo-demo").Create(ctx, pod, metav1.CreateOptions{})
+		_, err = clientset.CoreV1().Pods("default").Create(ctx, pod, metav1.CreateOptions{})
 		if err != nil {
 			panic(err)
 		}
