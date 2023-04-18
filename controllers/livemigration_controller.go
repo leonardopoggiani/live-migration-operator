@@ -4,8 +4,9 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"k8s.io/apimachinery/pkg/api/resource"
+	"io"
 	"k8s.io/apimachinery/pkg/util/intstr"
+	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -659,39 +660,6 @@ func (r *LiveMigrationReconciler) buildahCheckpointRestore(ctx context.Context, 
 		}
 
 		// TODO: instead of pushing the image to the registry move the checkpoint using liqo
-		/*
-			kubectlCmd := exec.Command("kubectl", "apply", "-f", "/home/fedora/live-migration-operator/config/liqo/dummy-pod.yaml")
-			out, err = kubectlCmd.CombinedOutput()
-			if err != nil {
-				klog.ErrorS(err, "failed to create dummy pod")
-				klog.Infof("out: %s", out)
-			} else {
-				klog.Infof("dummy pod created")
-			}
-		*/
-
-		var str string = "test-csi-provisioner"
-		var ptr *string = &str
-		// Create the dummy pod programatically
-		// Create the PersistentVolumeClaim
-		pvc := &corev1.PersistentVolumeClaim{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      "dummy-pvc",
-				Namespace: "default",
-			},
-			Spec: corev1.PersistentVolumeClaimSpec{
-				AccessModes: []corev1.PersistentVolumeAccessMode{
-					corev1.ReadWriteOnce,
-				},
-				Resources: corev1.ResourceRequirements{
-					Requests: corev1.ResourceList{
-						"storage": resource.MustParse("1Gi"),
-					},
-				},
-				StorageClassName: ptr,
-			},
-		}
-
 		kubeconfigPath := os.Getenv("KUBECONFIG")
 		if kubeconfigPath == "" {
 			kubeconfigPath = "~/.kube/config"
@@ -713,7 +681,6 @@ func (r *LiveMigrationReconciler) buildahCheckpointRestore(ctx context.Context, 
 			klog.ErrorS(err, "failed to create Kubernetes client")
 		}
 
-		// Create the Service
 		service := &corev1.Service{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      "dummy-service",
@@ -733,6 +700,121 @@ func (r *LiveMigrationReconciler) buildahCheckpointRestore(ctx context.Context, 
 			},
 		}
 
+		_, err = clientset.CoreV1().Services("default").Create(ctx, service, metav1.CreateOptions{})
+		if err != nil {
+			panic(err)
+		}
+
+		// get the Service by name and namespace
+		service, err = clientset.CoreV1().Services("default").Get(context.Background(), "dummy-service", metav1.GetOptions{})
+		if err != nil {
+			klog.ErrorS(err, "failed to get service", "service", "dummy-service")
+		}
+
+		// get the IP address of the Service
+		serviceIP := service.Spec.ClusterIP
+
+		// create a byte buffer and write the file content to it
+		fileData, err := os.ReadFile(checkpointPath)
+		if err != nil {
+			klog.ErrorS(err, "failed to read checkpoint file")
+		} else {
+			klog.Info("checkpoint file read")
+		}
+
+		buffer := bytes.NewBuffer(fileData)
+
+		// send a POST request with the file content as the body
+		resp, err := http.Post(fmt.Sprintf("http://%s:%d", serviceIP, service.Spec.Ports[0].Port), "application/octet-stream", buffer)
+		if err != nil {
+			klog.ErrorS(err, "failed to post on the service", "service", "dummy-service")
+		}
+
+		defer resp.Body.Close()
+		body, err := io.ReadAll(resp.Body)
+		if err != nil {
+			klog.ErrorS(err, "failed to read response body")
+		} else {
+			klog.Info("response body read", "body", string(body))
+		}
+
+		/*
+			kubectlCmd := exec.Command("kubectl", "apply", "-f", "/home/fedora/live-migration-operator/config/liqo/dummy-pod.yaml")
+			out, err = kubectlCmd.CombinedOutput()
+			if err != nil {
+				klog.ErrorS(err, "failed to create dummy pod")
+				klog.Infof("out: %s", out)
+			} else {
+				klog.Infof("dummy pod created")
+			}
+		*/
+
+		/*
+			var str string = "test-csi-provisioner"
+			var ptr *string = &str
+			// Create the dummy pod programatically
+			// Create the PersistentVolumeClaim
+			pvc := &corev1.PersistentVolumeClaim{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "dummy-pvc",
+					Namespace: "default",
+				},
+				Spec: corev1.PersistentVolumeClaimSpec{
+					AccessModes: []corev1.PersistentVolumeAccessMode{
+						corev1.ReadWriteOnce,
+					},
+					Resources: corev1.ResourceRequirements{
+						Requests: corev1.ResourceList{
+							"storage": resource.MustParse("1Gi"),
+						},
+					},
+					StorageClassName: ptr,
+				},
+			}
+
+			kubeconfigPath := os.Getenv("KUBECONFIG")
+			if kubeconfigPath == "" {
+				kubeconfigPath = "~/.kube/config"
+			}
+
+			kubeconfigPath = os.ExpandEnv(kubeconfigPath)
+			if _, err := os.Stat(kubeconfigPath); os.IsNotExist(err) {
+				klog.ErrorS(err, "kubeconfig file not existing")
+			}
+
+			kubeconfig, err := clientcmd.BuildConfigFromFlags("", kubeconfigPath)
+			if err != nil {
+				klog.ErrorS(err, "Failed to retrieve kubeconfig")
+			}
+
+			// Create Kubernetes API client
+			clientset, err := kubernetes.NewForConfig(kubeconfig)
+			if err != nil {
+				klog.ErrorS(err, "failed to create Kubernetes client")
+			}
+
+			// Create the Service
+			service := &corev1.Service{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "dummy-service",
+					Namespace: "default",
+				},
+				Spec: corev1.ServiceSpec{
+					Ports: []corev1.ServicePort{
+						{
+							Name:       "http",
+							Port:       8080,
+							TargetPort: intstr.FromInt(8080),
+						},
+					},
+					Selector: map[string]string{
+						"app": "dummy-pod",
+					},
+				},
+			}
+
+
+		*/
 		/*
 			service := &corev1.Service{
 				ObjectMeta: metav1.ObjectMeta{
@@ -755,49 +837,52 @@ func (r *LiveMigrationReconciler) buildahCheckpointRestore(ctx context.Context, 
 
 		*/
 
-		_, err = clientset.CoreV1().Services("default").Create(ctx, service, metav1.CreateOptions{})
-		if err != nil {
-			panic(err)
-		}
+		/*
+			_, err = clientset.CoreV1().Services("default").Create(ctx, service, metav1.CreateOptions{})
+			if err != nil {
+				panic(err)
+			}
 
-		_, err = clientset.CoreV1().PersistentVolumeClaims("default").Create(ctx, pvc, metav1.CreateOptions{})
-		if err != nil {
-			panic(err)
-		}
+			_, err = clientset.CoreV1().PersistentVolumeClaims("default").Create(ctx, pvc, metav1.CreateOptions{})
+			if err != nil {
+				panic(err)
+			}
 
-		// Create the Pod
-		pod := &corev1.Pod{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      "dummy-pod",
-				Namespace: "default",
-			},
-			Spec: corev1.PodSpec{
-				NodeName: "poggianifedora-1.novalocal",
-				Containers: []corev1.Container{
-					{
-						Name:  "dummy-container",
-						Image: "nginx",
-						VolumeMounts: []corev1.VolumeMount{
-							{
-								Name:      "mypvc",
-								MountPath: "/var/lib/www/html",
+			// Create the Pod
+			pod := &corev1.Pod{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "dummy-pod",
+					Namespace: "default",
+				},
+				Spec: corev1.PodSpec{
+					NodeName: "poggianifedora-1.novalocal",
+					Containers: []corev1.Container{
+						{
+							Name:  "dummy-container",
+							Image: "nginx",
+							VolumeMounts: []corev1.VolumeMount{
+								{
+									Name:      "mypvc",
+									MountPath: "/var/lib/www/html",
+								},
+							},
+						},
+					},
+					Volumes: []corev1.Volume{
+						{
+							Name: "mypvc",
+							VolumeSource: corev1.VolumeSource{
+								PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
+									ClaimName: "dummy-pvc",
+									ReadOnly:  false,
+								},
 							},
 						},
 					},
 				},
-				Volumes: []corev1.Volume{
-					{
-						Name: "mypvc",
-						VolumeSource: corev1.VolumeSource{
-							PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
-								ClaimName: "dummy-pvc",
-								ReadOnly:  false,
-							},
-						},
-					},
-				},
-			},
-		}
+			}
+
+		*/
 
 		/*
 			pod := &corev1.Pod{
@@ -834,11 +919,12 @@ func (r *LiveMigrationReconciler) buildahCheckpointRestore(ctx context.Context, 
 			}
 		*/
 
-		_, err = clientset.CoreV1().Pods("default").Create(ctx, pod, metav1.CreateOptions{})
+		/* _, err = clientset.CoreV1().Pods("default").Create(ctx, pod, metav1.CreateOptions{})
 		if err != nil {
 			panic(err)
 		}
 
+		*/
 		/*
 			authFile := "/run/user/1000/containers/auth.json"
 			localCheckpointPath = "localhost/" + localCheckpointPath
