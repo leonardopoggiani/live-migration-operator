@@ -442,6 +442,7 @@ func (r *LiveMigrationReconciler) checkpointPodCrio(containers []Container, name
 		} else {
 			klog.InfoS("checkpointed pod", "output", string(output))
 		}
+
 	}
 
 	return nil
@@ -583,6 +584,16 @@ func (r *LiveMigrationReconciler) buildahCheckpointRestore(ctx context.Context, 
 		klog.Infof("file found: %s", file.Name())
 		checkpointPath := filepath.Join(dir, file.Name())
 		klog.Infof("checkpointPath: %s", checkpointPath)
+
+		// change permissions of checkpoint file
+		// sudo chmod +r /tmp/checkpoints/checkpoints/checkpoint-tomcat-pod_liqo-demo-tomcat-2023-04-18T09:39:13Z.tar
+		chmodCmd := exec.Command("sudo", "chmod", "+r", checkpointPath)
+		chmodOutput, err := chmodCmd.Output()
+		if err != nil {
+			klog.ErrorS(err, "failed to change permissions of checkpoint file", "checkpointPath", checkpointPath)
+		} else {
+			klog.Infof("checkpoint file permissions changed: %s", chmodOutput)
+		}
 
 		newContainerCmd := exec.Command("sudo", "buildah", "from", "scratch")
 		newContainerOutput, err := newContainerCmd.Output()
