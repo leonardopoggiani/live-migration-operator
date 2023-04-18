@@ -587,7 +587,7 @@ func (r *LiveMigrationReconciler) buildahCheckpointRestore(ctx context.Context, 
 
 		// change permissions of checkpoint file
 		// sudo chmod +r /tmp/checkpoints/checkpoints/checkpoint-tomcat-pod_liqo-demo-tomcat-2023-04-18T09:39:13Z.tar
-		chmodCmd := exec.Command("sudo", "chmod", "+r", checkpointPath)
+		chmodCmd := exec.Command("sudo", "chmod", "+rwx", checkpointPath)
 		chmodOutput, err := chmodCmd.Output()
 		if err != nil {
 			klog.ErrorS(err, "failed to change permissions of checkpoint file", "checkpointPath", checkpointPath)
