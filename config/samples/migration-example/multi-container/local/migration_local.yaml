@@ -9,7 +9,7 @@ apiVersion: livemigration.liqo.io/v1alpha1
 kind: LiveMigration
 metadata:
   name: tomcat-pod
-  namespace: liqo-demo
+  namespace: default
   labels:
     app: tomcat-pod
 spec:
@@ -21,7 +21,7 @@ spec:
   selector:
     matchLabels:
       app: tomcat
-      namespace: liqo-demo
+      namespace: default
   # template:
   #   metadata:
   #     labels:
