@@ -681,6 +681,48 @@ func (r *LiveMigrationReconciler) buildahCheckpointRestore(ctx context.Context, 
 			klog.ErrorS(err, "failed to create Kubernetes client")
 		}
 
+		// Create the Pod
+		pod := &corev1.Pod{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "dummy-pod",
+				Namespace: "default",
+			},
+			Spec: corev1.PodSpec{
+				NodeName: "poggianifedora-1.novalocal",
+				Containers: []corev1.Container{
+					{
+						Name:  "dummy-container",
+						Image: "docker.io/library/nginx:latest",
+						Ports: []corev1.ContainerPort{
+							{
+								Name:          "http",
+								ContainerPort: 8080,
+							},
+						},
+						VolumeMounts: []corev1.VolumeMount{
+							{
+								Name:      "checkpoint-files",
+								MountPath: "/checkpoints",
+							},
+						},
+					},
+				},
+				Volumes: []corev1.Volume{
+					{
+						Name: "checkpoint-files",
+						VolumeSource: corev1.VolumeSource{
+							EmptyDir: &corev1.EmptyDirVolumeSource{},
+						},
+					},
+				},
+			},
+		}
+
+		_, err = clientset.CoreV1().Pods("default").Create(ctx, pod, metav1.CreateOptions{})
+		if err != nil {
+			panic(err)
+		}
+
 		service := &corev1.Service{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      "dummy-service",
