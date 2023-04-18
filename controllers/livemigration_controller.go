@@ -726,6 +726,8 @@ func (r *LiveMigrationReconciler) buildahCheckpointRestore(ctx context.Context, 
 		err = r.waitForContainerReady(pod.Name, "default", "dummy-container", clientset)
 		if err != nil {
 			klog.ErrorS(err, "failed to wait for container ready")
+		} else {
+			klog.Infof("Container ready")
 		}
 
 		service := &corev1.Service{
