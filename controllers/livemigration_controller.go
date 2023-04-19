@@ -4,9 +4,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"io"
 	"k8s.io/apimachinery/pkg/util/intstr"
-	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -769,20 +767,28 @@ func (r *LiveMigrationReconciler) buildahCheckpointRestore(ctx context.Context, 
 		}
 
 		buffer := bytes.NewBuffer(fileData)
+		klog.Infof("buffer", buffer)
 
 		// send a POST request with the file content as the body
-		resp, err := http.Post(fmt.Sprintf("http://%s:%d", serviceIP, service.Spec.Ports[0].Port), "application/octet-stream", buffer)
+		postCmd := exec.Command("curl", "-X", "POST", "-F", fmt.Sprintf("file=@%s", checkpointPath), fmt.Sprintf("http://%s:%d/upload", serviceIP, service.Spec.Ports[0].Port))
+		// curl -X POST -F 'file=@log_restore.txt' http://10.104.4.80:80/upload
+		// resp, err := http.Post(fmt.Sprintf("http://%s:%d", serviceIP, service.Spec.Ports[0].Port), "application/octet-stream", buffer)
+		postOut, err := postCmd.CombinedOutput()
 		if err != nil {
 			klog.ErrorS(err, "failed to post on the service", "service", "dummy-service")
+		} else {
+			klog.Infof("post on the service", "service", "dummy-service", "out", string(postOut))
 		}
 
-		defer resp.Body.Close()
-		body, err := io.ReadAll(resp.Body)
-		if err != nil {
-			klog.ErrorS(err, "failed to read response body")
-		} else {
-			klog.Info("response body read", "body", string(body))
-		}
+		/*
+			defer resp.Body.Close()
+			body, err := io.ReadAll(resp.Body)
+			if err != nil {
+				klog.ErrorS(err, "failed to read response body")
+			} else {
+				klog.Info("response body read", "body", string(body))
+			}
+		*/
 
 		/*
 			kubectlCmd := exec.Command("kubectl", "apply", "-f", "/home/fedora/live-migration-operator/config/liqo/dummy-pod.yaml")
