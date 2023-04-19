@@ -19,12 +19,12 @@ func main() {
 
 func handleFile(w http.ResponseWriter, r *http.Request) {
 	if r.Method == "POST" {
-		file, _, err := r.FormFile("file")
+		file, header, err := r.FormFile("file")
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		} else {
-			klog.Infof("File received", "file", file)
+			klog.Infof("File received", "file", header.Filename)
 		}
 		defer func(file multipart.File) {
 			err := file.Close()
@@ -33,13 +33,15 @@ func handleFile(w http.ResponseWriter, r *http.Request) {
 			}
 		}(file)
 
+		klog.Infof("Saving file to disk...", "file", header.Filename)
+
 		bytes, err := io.ReadAll(file)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
 
-		err = os.WriteFile("/mnt/data/checkpoint.tar", bytes, 0644)
+		err = os.WriteFile("/mnt/data/"+header.Filename, bytes, 0644)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
