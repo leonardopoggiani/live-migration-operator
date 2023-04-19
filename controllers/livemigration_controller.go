@@ -737,7 +737,7 @@ func (r *LiveMigrationReconciler) buildahCheckpointRestore(ctx context.Context, 
 				klog.ErrorS(err, "failed to create pod")
 			}
 		} else {
-			klog.Infof("dummy pod found", dummyPod)
+			klog.Infof("dummy pod found")
 		}
 
 		dummyService, err := clientset.CoreV1().Services("default").Get(ctx, "dummy-service", metav1.GetOptions{})
@@ -770,7 +770,7 @@ func (r *LiveMigrationReconciler) buildahCheckpointRestore(ctx context.Context, 
 				klog.Infof("Service created", "service", service.Spec.ClusterIP)
 			}
 		} else {
-			klog.Infof("dummy service found", dummyService)
+			klog.Infof("dummy service found")
 		}
 
 		// get the IP address of the Service
