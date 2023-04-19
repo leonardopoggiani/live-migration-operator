@@ -23,6 +23,8 @@ func handleFile(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
+		} else {
+			klog.Infof("File received", "file", file)
 		}
 		defer func(file multipart.File) {
 			err := file.Close()
@@ -37,7 +39,7 @@ func handleFile(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		err = os.WriteFile("/mnt/data/file.txt", bytes, 0644)
+		err = os.WriteFile("/mnt/data/checkpoint.tar", bytes, 0644)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
