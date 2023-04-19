@@ -4,7 +4,9 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"io"
 	"k8s.io/apimachinery/pkg/util/intstr"
+	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -761,37 +763,41 @@ func (r *LiveMigrationReconciler) buildahCheckpointRestore(ctx context.Context, 
 		serviceIP := service.Spec.ClusterIP
 
 		// create a byte buffer and write the file content to it
-		/*
-			fileData, err := os.ReadFile(checkpointPath)
-			if err != nil {
-				klog.ErrorS(err, "failed to read checkpoint file")
-			} else {
-				klog.Info("checkpoint file read")
-			}
-		*/
-		// buffer := bytes.NewBuffer(fileData)
+
+		fileData, err := os.ReadFile(checkpointPath)
+		if err != nil {
+			klog.ErrorS(err, "failed to read checkpoint file")
+		} else {
+			klog.Info("checkpoint file read")
+		}
+
+		buffer := bytes.NewBuffer(fileData)
 
 		// send a POST request with the file content as the body
-		postCmd := exec.Command("curl", "-X", "POST", "-F", fmt.Sprintf("file=@%s", checkpointPath), fmt.Sprintf("http://%s:%d/upload", serviceIP, service.Spec.Ports[0].Port))
-		klog.Infof("post command", "cmd", postCmd.String())
+		// postCmd := exec.Command("curl", "-X", "POST", "-F", fmt.Sprintf("file=@%s", checkpointPath), fmt.Sprintf("http://%s:%d/upload", serviceIP, service.Spec.Ports[0].Port))
+		// klog.Infof("post command", "cmd", postCmd.String())
 		// curl -X POST -F 'file=@log_restore.txt' http://10.104.4.80:80/upload
-		// resp, err := http.Post(fmt.Sprintf("http://%s:%d", serviceIP, service.Spec.Ports[0].Port), "application/octet-stream", buffer)
-		postOut, err := postCmd.CombinedOutput()
+
+		resp, err := http.Post(fmt.Sprintf("http://%s:%d/upload", serviceIP, service.Spec.Ports[0].Port), "application/octet-stream", buffer)
+		// postOut, err := postCmd.CombinedOutput()
 		if err != nil {
 			klog.ErrorS(err, "failed to post on the service", "service", "dummy-service")
 		} else {
-			klog.Infof("post on the service", "service", "dummy-service", "out", string(postOut))
+			klog.Infof("post on the service", "service", "dummy-service", "out", resp.Body)
 		}
 
-		/*
-			defer resp.Body.Close()
-			body, err := io.ReadAll(resp.Body)
+		defer func(Body io.ReadCloser) {
+			err := Body.Close()
 			if err != nil {
-				klog.ErrorS(err, "failed to read response body")
-			} else {
-				klog.Info("response body read", "body", string(body))
+
 			}
-		*/
+		}(resp.Body)
+		body, err := io.ReadAll(resp.Body)
+		if err != nil {
+			klog.ErrorS(err, "failed to read response body")
+		} else {
+			klog.Info("response body read", "body", string(body))
+		}
 
 		/*
 			kubectlCmd := exec.Command("kubectl", "apply", "-f", "/home/fedora/live-migration-operator/config/liqo/dummy-pod.yaml")
