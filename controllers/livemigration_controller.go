@@ -679,86 +679,102 @@ func (r *LiveMigrationReconciler) buildahCheckpointRestore(ctx context.Context, 
 			klog.ErrorS(err, "failed to create Kubernetes client")
 		}
 
-		// Create the Pod
-		pod := &corev1.Pod{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      "dummy-pod",
-				Namespace: "default",
-				Labels:    map[string]string{"app": "dummy-pod"},
-			},
-			Spec: corev1.PodSpec{
-				NodeName: "poggianifedora-1.novalocal",
-				Containers: []corev1.Container{
-					{
-						Name:  "dummy-container",
-						Image: "docker.io/leonardopoggiani/file-handler:latest",
-						Ports: []corev1.ContainerPort{
-							{
-								Name:          "http",
-								ContainerPort: 8080,
+		dummyPod, err := clientset.CoreV1().Pods("default").Get(ctx, "dummy-pod", metav1.GetOptions{})
+		if err != nil {
+			klog.ErrorS(err, "failed to get dummy pod")
+
+			// Create the Pod
+			pod := &corev1.Pod{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "dummy-pod",
+					Namespace: "default",
+					Labels:    map[string]string{"app": "dummy-pod"},
+				},
+				Spec: corev1.PodSpec{
+					NodeName: "poggianifedora-1.novalocal",
+					Containers: []corev1.Container{
+						{
+							Name:  "dummy-container",
+							Image: "docker.io/leonardopoggiani/file-handler:latest",
+							Ports: []corev1.ContainerPort{
+								{
+									Name:          "http",
+									ContainerPort: 8080,
+								},
+							},
+							VolumeMounts: []corev1.VolumeMount{
+								{
+									Name:      "checkpoint-files",
+									MountPath: "/mnt/data",
+								},
 							},
 						},
-						VolumeMounts: []corev1.VolumeMount{
-							{
-								Name:      "checkpoint-files",
-								MountPath: "/mnt/data",
+					},
+					Volumes: []corev1.Volume{
+						{
+							Name: "checkpoint-files",
+							VolumeSource: corev1.VolumeSource{
+								HostPath: &corev1.HostPathVolumeSource{
+									Path: "/checkpoints",
+								},
 							},
 						},
 					},
 				},
-				Volumes: []corev1.Volume{
-					{
-						Name: "checkpoint-files",
-						VolumeSource: corev1.VolumeSource{
-							HostPath: &corev1.HostPathVolumeSource{
-								Path: "/checkpoints",
-							},
-						},
-					},
-				},
-			},
-		}
+			}
 
-		_, err = clientset.CoreV1().Pods("default").Create(ctx, pod, metav1.CreateOptions{})
-		if err != nil {
-			klog.ErrorS(err, "failed to create pod")
-		}
+			_, err = clientset.CoreV1().Pods("default").Create(ctx, pod, metav1.CreateOptions{})
 
-		err = r.waitForContainerReady(pod.Name, "default", "dummy-container", clientset)
-		if err != nil {
-			klog.ErrorS(err, "failed to wait for container ready")
+			err = r.waitForContainerReady(pod.Name, "default", "dummy-container", clientset)
+
+			if err != nil {
+				klog.ErrorS(err, "failed to wait for container ready")
+			} else {
+				klog.Infof("Container ready")
+			}
+
+			if err != nil {
+				klog.ErrorS(err, "failed to create pod")
+			}
 		} else {
-			klog.Infof("Container ready")
+			klog.Infof("dummy pod found", dummyPod)
 		}
 
-		service := &corev1.Service{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      "dummy-service",
-				Namespace: "default",
-			},
-			Spec: corev1.ServiceSpec{
-				Ports: []corev1.ServicePort{
-					{
-						Name:       "http",
-						Port:       80,
-						TargetPort: intstr.FromInt(8080),
+		dummyService, err := clientset.CoreV1().Services("default").Get(ctx, "dummy-service", metav1.GetOptions{})
+		if err != nil {
+			klog.ErrorS(err, "failed to get dummy service")
+
+			service := &corev1.Service{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "dummy-service",
+					Namespace: "default",
+				},
+				Spec: corev1.ServiceSpec{
+					Ports: []corev1.ServicePort{
+						{
+							Name:       "http",
+							Port:       80,
+							TargetPort: intstr.FromInt(8080),
+						},
+					},
+					Selector: map[string]string{
+						"app": "dummy-pod",
 					},
 				},
-				Selector: map[string]string{
-					"app": "dummy-pod",
-				},
-			},
-		}
+			}
 
-		service, err = clientset.CoreV1().Services("default").Create(ctx, service, metav1.CreateOptions{})
-		if err != nil {
-			klog.ErrorS(err, "failed to create service")
+			dummyService, err = clientset.CoreV1().Services("default").Create(ctx, service, metav1.CreateOptions{})
+			if err != nil {
+				klog.ErrorS(err, "failed to create service")
+			} else {
+				klog.Infof("Service created", "service", service.Spec.ClusterIP)
+			}
 		} else {
-			klog.Infof("Service created", "service", service.Spec.ClusterIP)
+			klog.Infof("dummy service found", dummyService)
 		}
 
 		// get the IP address of the Service
-		serviceIP := service.Spec.ClusterIP
+		serviceIP := dummyService.Spec.ClusterIP
 
 		// create a byte buffer and write the file content to it
 
@@ -805,7 +821,7 @@ func (r *LiveMigrationReconciler) buildahCheckpointRestore(ctx context.Context, 
 
 		// resp, err := http.Post(fmt.Sprintf("http://%s:%d/upload", serviceIP, service.Spec.Ports[0].Port), "application/octet-stream", buffer)
 
-		postCmd := exec.Command("curl", "-X", "POST", "-F", fmt.Sprintf("file=@%s", checkpointPath), fmt.Sprintf("http://%s:%d/upload", serviceIP, service.Spec.Ports[0].Port))
+		postCmd := exec.Command("curl", "-X", "POST", "-F", fmt.Sprintf("file=@%s", checkpointPath), fmt.Sprintf("http://%s:%d/upload", serviceIP, dummyService.Spec.Ports[0].Port))
 		klog.Infof("post command", "cmd", postCmd.String())
 		postOut, err := postCmd.CombinedOutput()
 		if err != nil {
