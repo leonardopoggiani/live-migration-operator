@@ -778,9 +778,33 @@ func (r *LiveMigrationReconciler) buildahCheckpointRestore(ctx context.Context, 
 		// klog.Infof("post command", "cmd", postCmd.String())
 		// curl -X POST -F 'file=@log_restore.txt' http://10.104.4.80:80/upload
 
-		resp, err := http.Post(fmt.Sprintf("http://%s:%d/upload", serviceIP, service.Spec.Ports[0].Port), "application/octet-stream", buffer)
-		// postOut, err := postCmd.CombinedOutput()
+		httpClient := http.Client{
+			Timeout: 10 * time.Second,
+		}
+
+		req, err := http.NewRequest(http.MethodPost, fmt.Sprintf("http://%s:%d/upload", serviceIP, service.Spec.Ports[0].Port), buffer)
 		if err != nil {
+			klog.ErrorS(err, "failed to create request")
+		} else {
+			klog.Info("request created")
+		}
+
+		res, err := httpClient.Do(req)
+		if err != nil {
+			klog.ErrorS(err, "failed to post on the service", "service", "dummy-service")
+		} else {
+			klog.Info("post on the service", "service", "dummy-service")
+		}
+		defer func(Body io.ReadCloser) {
+			err := Body.Close()
+			if err != nil {
+				klog.ErrorS(err, "failed to close response body")
+			}
+		}(res.Body)
+
+		// resp, err := http.Post(fmt.Sprintf("http://%s:%d/upload", serviceIP, service.Spec.Ports[0].Port), "application/octet-stream", buffer)
+		// postOut, err := postCmd.CombinedOutput()
+		/*if err != nil {
 			klog.ErrorS(err, "failed to post on the service", "service", "dummy-service")
 		} else {
 			klog.Infof("post on the service", "service", "dummy-service", "out", resp.Body)
@@ -798,6 +822,7 @@ func (r *LiveMigrationReconciler) buildahCheckpointRestore(ctx context.Context, 
 		} else {
 			klog.Info("response body read", "body", string(body))
 		}
+		*/
 
 		/*
 			kubectlCmd := exec.Command("kubectl", "apply", "-f", "/home/fedora/live-migration-operator/config/liqo/dummy-pod.yaml")
