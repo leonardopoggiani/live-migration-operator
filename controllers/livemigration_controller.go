@@ -679,7 +679,7 @@ func (r *LiveMigrationReconciler) buildahCheckpointRestore(ctx context.Context, 
 			klog.ErrorS(err, "failed to create Kubernetes client")
 		}
 
-		dummyPod, err := clientset.CoreV1().Pods("default").Get(ctx, "dummy-pod", metav1.GetOptions{})
+		_, err = clientset.CoreV1().Pods("default").Get(ctx, "dummy-pod", metav1.GetOptions{})
 		if err != nil {
 			klog.ErrorS(err, "failed to get dummy pod")
 
