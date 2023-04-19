@@ -779,7 +779,7 @@ func (r *LiveMigrationReconciler) buildahCheckpointRestore(ctx context.Context, 
 		// curl -X POST -F 'file=@log_restore.txt' http://10.104.4.80:80/upload
 
 		httpClient := http.Client{
-			Timeout: 10 * time.Second,
+			Timeout: 60 * time.Second,
 		}
 
 		req, err := http.NewRequest(http.MethodPost, fmt.Sprintf("http://%s:%d/upload", serviceIP, service.Spec.Ports[0].Port), buffer)
