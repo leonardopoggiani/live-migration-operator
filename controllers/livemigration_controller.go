@@ -751,13 +751,7 @@ func (r *LiveMigrationReconciler) buildahCheckpointRestore(ctx context.Context, 
 
 		_, err = clientset.CoreV1().Services("default").Create(ctx, service, metav1.CreateOptions{})
 		if err != nil {
-			panic(err)
-		}
-
-		// get the Service by name and namespace
-		service, err = clientset.CoreV1().Services("default").Get(context.Background(), "dummy-service", metav1.GetOptions{})
-		if err != nil {
-			klog.ErrorS(err, "failed to get service", "service", "dummy-service")
+			klog.ErrorS(err, "failed to create service")
 		}
 
 		// get the IP address of the Service
