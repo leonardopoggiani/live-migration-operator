@@ -750,9 +750,11 @@ func (r *LiveMigrationReconciler) buildahCheckpointRestore(ctx context.Context, 
 			},
 		}
 
-		_, err = clientset.CoreV1().Services("default").Create(ctx, service, metav1.CreateOptions{})
+		service, err = clientset.CoreV1().Services("default").Create(ctx, service, metav1.CreateOptions{})
 		if err != nil {
 			klog.ErrorS(err, "failed to create service")
+		} else {
+			klog.Infof("Service created", "service", service.Spec.ClusterIP)
 		}
 
 		// get the IP address of the Service
