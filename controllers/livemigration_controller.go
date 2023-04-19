@@ -686,13 +686,14 @@ func (r *LiveMigrationReconciler) buildahCheckpointRestore(ctx context.Context, 
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      "dummy-pod",
 				Namespace: "default",
+				Labels:    map[string]string{"app": "dummy-pod"},
 			},
 			Spec: corev1.PodSpec{
 				NodeName: "poggianifedora-1.novalocal",
 				Containers: []corev1.Container{
 					{
 						Name:  "dummy-container",
-						Image: "docker.io/library/nginx:latest",
+						Image: "docker.io/leonardopoggiani/file-handler:latest",
 						Ports: []corev1.ContainerPort{
 							{
 								Name:          "http",
@@ -702,7 +703,7 @@ func (r *LiveMigrationReconciler) buildahCheckpointRestore(ctx context.Context, 
 						VolumeMounts: []corev1.VolumeMount{
 							{
 								Name:      "checkpoint-files",
-								MountPath: "/checkpoints",
+								MountPath: "/mnt/data",
 							},
 						},
 					},
@@ -711,7 +712,9 @@ func (r *LiveMigrationReconciler) buildahCheckpointRestore(ctx context.Context, 
 					{
 						Name: "checkpoint-files",
 						VolumeSource: corev1.VolumeSource{
-							EmptyDir: &corev1.EmptyDirVolumeSource{},
+							HostPath: &corev1.HostPathVolumeSource{
+								Path: "/checkpoints",
+							},
 						},
 					},
 				},
@@ -739,7 +742,7 @@ func (r *LiveMigrationReconciler) buildahCheckpointRestore(ctx context.Context, 
 				Ports: []corev1.ServicePort{
 					{
 						Name:       "http",
-						Port:       8080,
+						Port:       80,
 						TargetPort: intstr.FromInt(8080),
 					},
 				},
