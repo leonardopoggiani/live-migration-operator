@@ -91,34 +91,34 @@ func (r *LiveMigrationReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 			if migratingPod.Spec.DestHost != "" {
 				template.Spec.NodeSelector = map[string]string{"kubernetes.io/hostname": migratingPod.Spec.DestHost}
 			}
+
+			desiredLabels := getPodsLabelSet(template)
+			desiredLabels["migratingPod"] = migratingPod.Name
+
+			annotations = getPodsAnnotationSet(&migratingPod, template)
+
+			// Then list all pods controlled by the LiveMigration resource object
+			var childPods corev1.PodList
+			if err := r.List(ctx, &childPods, client.InNamespace(req.Namespace), client.MatchingLabels(desiredLabels)); err != nil {
+				klog.ErrorS(err, "unable to list child pods")
+				return ctrl.Result{}, err
+			}
+
+			pod, err = r.desiredPod(migratingPod, &migratingPod, req.Namespace, template)
+			if err != nil {
+				return ctrl.Result{}, err
+			}
+
+			depl, err = r.desiredDeployment(migratingPod, &migratingPod, req.Namespace, template)
+			if err != nil {
+				return ctrl.Result{}, err
+			}
+
+			klog.Infof("", "annotations ", annotations["snapshotPath"])
+
+			count, _, _ := r.getActualRunningPod(&childPods)
+			klog.Infof("", "number of actual running pod ", count)
 		}
-
-		desiredLabels := getPodsLabelSet(template)
-		desiredLabels["migratingPod"] = migratingPod.Name
-
-		annotations = getPodsAnnotationSet(&migratingPod, template)
-
-		// Then list all pods controlled by the LiveMigration resource object
-		var childPods corev1.PodList
-		if err := r.List(ctx, &childPods, client.InNamespace(req.Namespace), client.MatchingLabels(desiredLabels)); err != nil {
-			klog.ErrorS(err, "unable to list child pods")
-			return ctrl.Result{}, err
-		}
-
-		pod, err = r.desiredPod(migratingPod, &migratingPod, req.Namespace, template)
-		if err != nil {
-			return ctrl.Result{}, err
-		}
-
-		depl, err = r.desiredDeployment(migratingPod, &migratingPod, req.Namespace, template)
-		if err != nil {
-			return ctrl.Result{}, err
-		}
-
-		klog.Infof("", "annotations ", annotations["snapshotPath"])
-
-		count, _, _ := r.getActualRunningPod(&childPods)
-		klog.Infof("", "number of actual running pod ", count)
 	}
 
 	if annotations["snapshotPolicy"] == "live-migration" && annotations["sourcePod"] != "" {
