@@ -306,27 +306,20 @@ func (r *LiveMigrationReconciler) checkPodExist(ctx context.Context, name string
 
 func (r *LiveMigrationReconciler) getSourcePodTemplate(ctx context.Context, sourcePodName string, namespace string) (*corev1.PodTemplateSpec, error) {
 	klog.Infof("", "getSourcePodTemplate", "sourcePodName", sourcePodName, "namespace", namespace)
-	sourcePod, err := r.checkPodExist(ctx, sourcePodName, namespace)
-	if sourcePod == nil {
+	retrievedPod, err := r.checkPodExist(ctx, sourcePodName, namespace)
+	if retrievedPod == nil {
 		return nil, err
 	} else {
-		klog.Infof("", "getSourcePodTemplate", "sourcePod", sourcePod.Name)
+		klog.Infof("", "getSourcePodTemplate", "sourcePod", retrievedPod.Name)
 	}
 
-	pod := sourcePod.DeepCopy()
-	container := pod.Spec.Containers[0]
+	copyPod := retrievedPod.DeepCopy()
+	containerList := copyPod.Spec.Containers
 	template := &corev1.PodTemplateSpec{
-		ObjectMeta: pod.ObjectMeta,
+		ObjectMeta: copyPod.ObjectMeta,
 		Spec: corev1.PodSpec{
-			Containers: []corev1.Container{
-				{
-					Name:         container.Name,
-					Image:        container.Image,
-					Ports:        container.Ports,
-					VolumeMounts: container.VolumeMounts,
-				},
-			},
-			Volumes: pod.Spec.Volumes,
+			Containers: containerList,
+			Volumes:    copyPod.Spec.Volumes,
 		},
 	}
 	return template, nil
