@@ -79,6 +79,8 @@ func (r *LiveMigrationReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 	var depl *appsv1.Deployment
 	var annotations map[string]string
 
+	klog.Infof("migratingPod.Spec.SourcePod ", migratingPod.Spec.SourcePod, "migratingPod.Spec.DestHost ", migratingPod.Spec.DestHost, "req.Namespace ", req.Namespace)
+
 	if migratingPod.Spec.Template.ObjectMeta.Name != "" {
 		template = &migratingPod.Spec.Template
 	} else {
