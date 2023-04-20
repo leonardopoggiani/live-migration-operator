@@ -82,7 +82,7 @@ func (r *LiveMigrationReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 		template, Err = r.getSourcePodTemplate(ctx, migratingPod.Spec.SourcePod, req.Namespace)
 		if Err != nil || template == nil {
 			klog.ErrorS(Err, "sourcePod not exist", "pod", migratingPod.Spec.SourcePod)
-			return ctrl.Result{}, Err
+			// return ctrl.Result{}, Err
 		}
 	}
 
