@@ -266,14 +266,15 @@ func (r *LiveMigrationReconciler) deletePod(ctx context.Context, pod *corev1.Pod
 }
 
 func (r *LiveMigrationReconciler) checkPodExist(ctx context.Context, name string, namespace string) (*corev1.Pod, error) {
-	podList := &corev1.PodList{}
+	pods := &corev1.PodList{}
 	klog.Infof("checkPodExist", "pod", name, "namespace", namespace)
-	if err := r.List(ctx, podList, client.InNamespace(namespace)); err != nil {
+	if err := r.List(ctx, pods, client.InNamespace(namespace)); err != nil {
 		klog.ErrorS(err, "unable to list pods", "pod", name)
 		return nil, err
 	}
-	if len(podList.Items) > 0 {
-		for _, podItem := range podList.Items {
+	if len(pods.Items) > 0 {
+		klog.Infof("pod found", "pod", name)
+		for _, podItem := range pods.Items {
 			if podItem.Name == name && podItem.Status.Phase == "Running" {
 				klog.Infof("running pod found")
 				return &podItem, nil
