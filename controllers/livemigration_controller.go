@@ -73,11 +73,6 @@ func (r *LiveMigrationReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 		klog.ErrorS(err, "failed to create dummy pod")
 	}
 
-	err = r.createDummyService(clientset, ctx)
-	if err != nil {
-		klog.ErrorS(err, "failed to create dummy service")
-	}
-
 	// Load the LiveMigration resource object, if there is no Object, return directly
 	var migratingPod api.LiveMigration
 	if err := r.Get(ctx, req.NamespacedName, &migratingPod); err != nil {
@@ -625,6 +620,11 @@ func (r *LiveMigrationReconciler) buildahCheckpointRestore(ctx context.Context, 
 		}
 
 		// get the IP address of the Service
+		err = r.createDummyService(clientset, ctx)
+		if err != nil {
+			klog.ErrorS(err, "failed to create dummy service")
+		}
+
 		dummyIp, dummyPort := r.getDummyServiceIPAndPort(clientset, ctx)
 
 		// create a byte buffer and write the file content to it
