@@ -121,40 +121,37 @@ func (r *LiveMigrationReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 		}
 	}
 
-	if annotations["snapshotPolicy"] == "live-migration" && annotations["sourcePod"] != "" {
-		// We are live-migrate a running pod here - Hot scale
-		klog.Infof("", "live-migrate a running pod")
+	klog.Infof("", "Migrate or restore a running pod")
 
-		for {
-			fileExists := checkFileExist("/checkpoints")
+	for {
+		fileExists := checkFileExist("/checkpoints")
 
-			if fileExists {
-				// file exists, check if sourcePod exists
-				klog.Infof("", "file exists, check if sourcePod exists")
-				sourcePod, err := r.checkPodExist(ctx, annotations["sourcePod"], req.Namespace)
-				if err != nil || sourcePod == nil {
-					klog.ErrorS(err, "failed to get sourcePod", "pod", annotations["sourcePod"])
-					klog.Infof("But file exists, so it's a restore process")
+		if fileExists {
+			// file exists, check if sourcePod exists
+			klog.Infof("", "file exists, check if sourcePod exists")
+			sourcePod, err := r.checkPodExist(ctx, annotations["sourcePod"], req.Namespace)
+			if err != nil || sourcePod == nil {
+				klog.ErrorS(err, "failed to get sourcePod", "pod", annotations["sourcePod"])
+				klog.Infof("But file exists, so it's a restore process")
 
-					// TODO: restore process
-				}
-
-				if sourcePod != nil {
-					// sourcePod exists, trigger migration
-					klog.Infof("", "sourcePod exists, trigger migration")
-					_, err = r.migratePod(ctx, pod, depl, clientset, sourcePod, req, &migratingPod)
-					if err != nil {
-						klog.ErrorS(err, "failed to migrate pod", "pod", sourcePod.Name)
-						return ctrl.Result{}, err
-					}
-
-					klog.InfoS("Pod migration triggered", "pod", sourcePod.Name)
-					return ctrl.Result{}, nil
-				}
+				// TODO: restore process
 			}
 
-			time.Sleep(10 * time.Second)
+			if sourcePod != nil {
+				// sourcePod exists, trigger migration
+				klog.Infof("", "sourcePod exists, trigger migration")
+				_, err = r.migratePod(ctx, pod, depl, clientset, sourcePod, req, &migratingPod)
+				if err != nil {
+					klog.ErrorS(err, "failed to migrate pod", "pod", sourcePod.Name)
+					return ctrl.Result{}, err
+				}
+
+				klog.InfoS("Pod migration triggered", "pod", sourcePod.Name)
+				return ctrl.Result{}, nil
+			}
 		}
+
+		time.Sleep(10 * time.Second)
 	}
 
 	// Step5: Clean checkpointpod process and checkpointPath
