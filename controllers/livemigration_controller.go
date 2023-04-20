@@ -70,11 +70,9 @@ func (r *LiveMigrationReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 
 	// Load the LiveMigration resource object, if there is no Object, return directly
 	var migratingPod api.LiveMigration
-	klog.Infof("", "namespaced name", req.NamespacedName)
 	if err := r.Get(ctx, req.NamespacedName, &migratingPod); err != nil {
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
-	klog.Infof("", "print test", migratingPod.Spec)
 
 	var template *corev1.PodTemplateSpec
 	if migratingPod.Spec.Template.ObjectMeta.Name != "" {
@@ -93,14 +91,9 @@ func (r *LiveMigrationReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 	}
 
 	desiredLabels := getPodsLabelSet(template)
-	klog.Infof("", "desired labels: ", desiredLabels)
-	klog.Infof("", "migratingPod.Name: ", migratingPod.Name)
-	klog.Infof("", "migratingPod.Spec.DestHost: ", migratingPod.Spec.DestHost)
-
 	desiredLabels["migratingPod"] = migratingPod.Name
 
 	annotations := getPodsAnnotationSet(&migratingPod, template)
-	klog.Infof("", "annotations: ", annotations)
 
 	// Then list all pods controlled by the LiveMigration resource object
 	var childPods corev1.PodList
@@ -110,21 +103,16 @@ func (r *LiveMigrationReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 	}
 
 	pod, err := r.desiredPod(migratingPod, &migratingPod, req.Namespace, template)
-	klog.Infof("", "pod: ", pod.Name)
 	if err != nil {
 		return ctrl.Result{}, err
 	}
 
 	depl, err := r.desiredDeployment(migratingPod, &migratingPod, req.Namespace, template)
-	klog.Infof("", "depl: ", depl.Name)
-
 	if err != nil {
 		return ctrl.Result{}, err
 	}
 
 	klog.Infof("", "annotations ", annotations["snapshotPath"])
-	klog.Infof("", "number of existing pod ", len(childPods.Items))
-	klog.Infof("", "number of desired pod ", migratingPod.Spec.Replicas)
 
 	count, _, _ := r.getActualRunningPod(&childPods)
 	klog.Infof("", "number of actual running pod ", count)
@@ -133,73 +121,36 @@ func (r *LiveMigrationReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 		// We are live-migrate a running pod here - Hot scale
 		klog.Infof("", "live-migrate a running pod")
 
-		/*
-			// sourcePod does not exist, wait for file creation
-			    for {
-			        fileExists, err := r.checkFileExist("/checkpoints")
-			        if err != nil {
-			            klog.ErrorS(err, "failed to check file existence")
-			            return ctrl.Result{}, err
-			        }
+		for {
+			fileExists := checkFileExist("/checkpoints")
 
-			        if fileExists {
-			            // file exists, check if sourcePod exists
-			            sourcePod, err = r.checkPodExist(ctx, annotations["sourcePod"], req.Namespace)
-			            if err != nil {
-			                klog.ErrorS(err, "failed to get sourcePod", "pod", annotations["sourcePod"])
-			                return ctrl.Result{}, err
-			            }
+			if fileExists {
+				// file exists, check if sourcePod exists
+				klog.Infof("", "file exists, check if sourcePod exists")
+				sourcePod, err := r.checkPodExist(ctx, annotations["sourcePod"], req.Namespace)
+				if err != nil || sourcePod == nil {
+					klog.ErrorS(err, "failed to get sourcePod", "pod", annotations["sourcePod"])
+					klog.Infof("But file exists, so it's a restore process")
 
-			            if sourcePod != nil {
-			                // sourcePod exists, trigger migration
-			                err = r.migratePod(sourcePod, annotations["destinationNode"])
-			                if err != nil {
-			                    klog.ErrorS(err, "failed to migrate pod", "pod", sourcePod.Name)
-			                    return ctrl.Result{}, err
-			                }
-
-			                klog.InfoS("Pod migration triggered", "pod", sourcePod.Name)
-			                return ctrl.Result{}, nil
-			            }
-			        }
-
-			        time.Sleep(10 * time.Second)
-			    }
-		*/
-
-		// Step1: Check source pod is exist or not clean previous source pod checkpoint/restore annotations and snapshotPath
-		sourcePod, err := r.checkPodExist(ctx, annotations["sourcePod"], req.Namespace)
-		if err != nil || sourcePod == nil {
-			klog.ErrorS(err, "sourcePod not exist", "pod", annotations["sourcePod"])
-			for {
-				fileExists := checkFileExist("/checkpoints")
-
-				if fileExists {
-					// file exists, check if sourcePod exists
-					sourcePod, err = r.checkPodExist(ctx, annotations["sourcePod"], req.Namespace)
-					if err != nil || sourcePod == nil {
-						klog.ErrorS(err, "failed to get sourcePod", "pod", annotations["sourcePod"])
-						klog.Infof("But file exists, so it's a restore process")
-
-					}
-
-					if sourcePod != nil {
-						// sourcePod exists, trigger migration
-						_, err = r.migratePod(ctx, pod, depl, clientset, sourcePod, req, &migratingPod)
-						if err != nil {
-							klog.ErrorS(err, "failed to migrate pod", "pod", sourcePod.Name)
-							return ctrl.Result{}, err
-						}
-
-						klog.InfoS("Pod migration triggered", "pod", sourcePod.Name)
-						return ctrl.Result{}, nil
-					}
+					// TODO: restore process
 				}
 
-				time.Sleep(10 * time.Second)
-			}
-		}
+				if sourcePod != nil {
+					// sourcePod exists, trigger migration
+					klog.Infof("", "sourcePod exists, trigger migration")
+					_, err = r.migratePod(ctx, pod, depl, clientset, sourcePod, req, &migratingPod)
+					if err != nil {
+						klog.ErrorS(err, "failed to migrate pod", "pod", sourcePod.Name)
+						return ctrl.Result{}, err
+					}
 
+					klog.InfoS("Pod migration triggered", "pod", sourcePod.Name)
+					return ctrl.Result{}, nil
+				}
+			}
+
+			time.Sleep(10 * time.Second)
+		}
 	}
 
 	// Step5: Clean checkpointpod process and checkpointPath
@@ -827,19 +778,20 @@ func (r *LiveMigrationReconciler) buildahCheckpointRestore(ctx context.Context, 
 			klog.Infof("post on the service", "service", "dummy-service", "out", string(postOut))
 		}
 
-		/*defer func(Body io.ReadCloser) {
-			err := Body.Close()
+		/*
+			defer func(Body io.ReadCloser) {
+				err := Body.Close()
+				if err != nil {
+
+				}
+			}(resp.Body)
+
+			body, err := io.ReadAll(resp.Body)
 			if err != nil {
-
+				klog.ErrorS(err, "failed to read response body")
+			} else {
+				klog.Info("response body read", "body", string(body))
 			}
-		}(resp.Body)
-
-		body, err := io.ReadAll(resp.Body)
-		if err != nil {
-			klog.ErrorS(err, "failed to read response body")
-		} else {
-			klog.Info("response body read", "body", string(body))
-		}
 
 		*/
 
