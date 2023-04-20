@@ -68,11 +68,6 @@ func (r *LiveMigrationReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 		klog.ErrorS(err, "failed to create Kubernetes client")
 	}
 
-	err = r.createDummyPod(clientset, ctx)
-	if err != nil {
-		klog.ErrorS(err, "failed to create dummy pod")
-	}
-
 	// Load the LiveMigration resource object, if there is no Object, return directly
 	var migratingPod api.LiveMigration
 	if err := r.Get(ctx, req.NamespacedName, &migratingPod); err != nil {
@@ -138,6 +133,11 @@ func (r *LiveMigrationReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 				klog.Infof("But file exists, so it's a restore process")
 
 				// TODO: restore process
+				err = r.createDummyPod(clientset, ctx)
+				if err != nil {
+					klog.ErrorS(err, "failed to create dummy pod")
+				}
+
 				// r.restore(..)
 			}
 
