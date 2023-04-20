@@ -1020,7 +1020,6 @@ func (r *LiveMigrationReconciler) createDummyPod(clientset *kubernetes.Clientset
 				Labels:    map[string]string{"app": "dummy-pod"},
 			},
 			Spec: corev1.PodSpec{
-				NodeName: "poggianifedora-1.novalocal",
 				Containers: []corev1.Container{
 					{
 						Name:  "dummy-container",
