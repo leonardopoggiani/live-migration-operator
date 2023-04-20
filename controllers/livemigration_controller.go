@@ -447,11 +447,11 @@ func (r *LiveMigrationReconciler) waitForContainerReady(podName string, namespac
 	}
 }
 
-func (r *LiveMigrationReconciler) terminateCheckpointedPod(ctx context.Context, podName string, namespace string, clientset *kubernetes.Clientset) error {
+func (r *LiveMigrationReconciler) terminateCheckpointedPod(ctx context.Context, podName string, clientset *kubernetes.Clientset) error {
 	// get the pod by name
 	klog.Infof("", "Terminating pod ", podName)
 
-	pod, err := clientset.CoreV1().Pods(namespace).Get(context.Background(), podName, metav1.GetOptions{})
+	pod, err := clientset.CoreV1().Pods("default").Get(context.Background(), podName, metav1.GetOptions{})
 	if err != nil {
 		klog.ErrorS(err, "unable to get pod ", pod.Name)
 	} else {
@@ -459,14 +459,14 @@ func (r *LiveMigrationReconciler) terminateCheckpointedPod(ctx context.Context, 
 	}
 
 	// delete the pod
-	err = clientset.CoreV1().Pods(namespace).Delete(context.Background(), podName, metav1.DeleteOptions{})
+	err = clientset.CoreV1().Pods("default").Delete(context.Background(), podName, metav1.DeleteOptions{})
 	if err != nil {
 		klog.ErrorS(err, "unable to delete pod", pod.Name)
 	} else {
 		klog.Info("pod deleted ", podName)
 	}
 
-	err = waitForPodDeletion(ctx, podName, namespace, clientset)
+	err = waitForPodDeletion(ctx, podName, "default", clientset)
 	if err != nil {
 		klog.ErrorS(err, "unable to finish delete pod", "pod", pod.Name)
 	} else {
@@ -1016,7 +1016,7 @@ func (r *LiveMigrationReconciler) migratePod(ctx context.Context, pod *corev1.Po
 	klog.Infof("", "Live-migration", "Step 1 - Check source pod is exist or not - completed")
 	klog.Infof("", "sourcePod status ", sourcePod.Status.Phase)
 
-	containers, err := PrintContainerIDs(clientset, req.Namespace)
+	containers, err := PrintContainerIDs(clientset, "default")
 	pathToClear := "/tmp/checkpoints/checkpoints"
 
 	err = os.Chmod(pathToClear, 0777)
@@ -1041,7 +1041,7 @@ func (r *LiveMigrationReconciler) migratePod(ctx context.Context, pod *corev1.Po
 	if err != nil {
 		return ctrl.Result{}, err
 	}
-	err = r.checkpointPodCrio(containers, req.Namespace, migratingPod.Name)
+	err = r.checkpointPodCrio(containers, "default", migratingPod.Name)
 	if err != nil {
 		klog.ErrorS(err, "unable to checkpoint")
 	}
@@ -1055,7 +1055,7 @@ func (r *LiveMigrationReconciler) migratePod(ctx context.Context, pod *corev1.Po
 
 	klog.Infof("", "Live-migration", "Step 2 - checkpoint source Pod - completed")
 
-	err = r.terminateCheckpointedPod(ctx, migratingPod.Name, req.Namespace, clientset)
+	err = r.terminateCheckpointedPod(ctx, migratingPod.Name, clientset)
 	if err != nil {
 		klog.ErrorS(err, "unable to terminate checkpointed pod", "pod", migratingPod.Name)
 	} else {
