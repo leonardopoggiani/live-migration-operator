@@ -1,4 +1,5 @@
 [credential]
+<<<<<<< HEAD
 	helper = cache
 [user]
 	name = Leonardo Poggiani
@@ -7,4 +8,14 @@
 	useHttpPath = true
 [url "git@github.com:"]
  	insteadOf = https://github.com/
+=======
+        helper = store
+[user]
+        name = Leonardo Poggiani
+        email = leonardo.poggiani@gmail.com
+[credential "https://dev.azure.com"]
+        useHttpPath = true
+[url "git@github.com:"]
+        insteadOf = https://github.com/
+>>>>>>> eb784df (config)
 
