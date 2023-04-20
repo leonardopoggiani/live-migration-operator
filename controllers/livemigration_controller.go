@@ -79,12 +79,12 @@ func (r *LiveMigrationReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 	var depl *appsv1.Deployment
 	var annotations map[string]string
 
-	klog.Infof("migratingPod.Spec.SourcePod ", migratingPod.Spec.SourcePod, "migratingPod.Spec.DestHost ", migratingPod.Spec.DestHost, "req.Namespace ", req.Namespace)
+	klog.Infof("migratingPod.Spec.SourcePod ", migratingPod.Spec.SourcePod, "migratingPod.Spec.DestHost ", migratingPod.Spec.DestHost)
 
 	if migratingPod.Spec.Template.ObjectMeta.Name != "" {
 		template = &migratingPod.Spec.Template
 	} else {
-		template, err = r.getSourcePodTemplate(clientset, migratingPod.Spec.SourcePod, req.Namespace)
+		template, err = r.getSourcePodTemplate(clientset, migratingPod.Spec.SourcePod)
 		if err != nil || template == nil {
 			klog.ErrorS(err, "sourcePod not exist", "pod", migratingPod.Spec.SourcePod)
 			// return ctrl.Result{}, Err
@@ -128,7 +128,7 @@ func (r *LiveMigrationReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 			// file exists, check if sourcePod exists
 			klog.Infof("", "file exists, check if sourcePod exists")
 			klog.Infof("", "annotations ", annotations["sourcePod"], "req.namespace", req.Namespace)
-			sourcePod, err := r.checkPodExist(clientset, annotations["sourcePod"], req.Namespace)
+			sourcePod, err := r.checkPodExist(clientset, annotations["sourcePod"])
 			if err != nil || sourcePod == nil {
 				klog.ErrorS(err, "failed to get sourcePod", "pod", annotations["sourcePod"], "namespace", req.Namespace)
 				klog.Infof("But file exists, so it's a restore process")
@@ -265,10 +265,10 @@ func (r *LiveMigrationReconciler) deletePod(ctx context.Context, pod *corev1.Pod
 	return nil
 }
 
-func (r *LiveMigrationReconciler) checkPodExist(clientset *kubernetes.Clientset, name string, namespace string) (*corev1.Pod, error) {
-	klog.Infof("checkPodExist", "pod", name, "namespace", namespace)
+func (r *LiveMigrationReconciler) checkPodExist(clientset *kubernetes.Clientset, name string) (*corev1.Pod, error) {
+	klog.Infof("checkPodExist", "pod", name)
 
-	existingPod, err := clientset.CoreV1().Pods(namespace).Get(context.Background(), name, metav1.GetOptions{})
+	existingPod, err := clientset.CoreV1().Pods("default").Get(context.Background(), name, metav1.GetOptions{})
 	if err != nil {
 		klog.ErrorS(err, "unable to fetch Pod", "pod", name)
 		return nil, err
@@ -278,9 +278,9 @@ func (r *LiveMigrationReconciler) checkPodExist(clientset *kubernetes.Clientset,
 	}
 }
 
-func (r *LiveMigrationReconciler) getSourcePodTemplate(clientset *kubernetes.Clientset, sourcePodName string, namespace string) (*corev1.PodTemplateSpec, error) {
-	klog.Infof("", "getSourcePodTemplate", "sourcePodName", sourcePodName, "namespace", namespace)
-	retrievedPod, err := r.checkPodExist(clientset, sourcePodName, namespace)
+func (r *LiveMigrationReconciler) getSourcePodTemplate(clientset *kubernetes.Clientset, sourcePodName string) (*corev1.PodTemplateSpec, error) {
+	klog.Infof("", "getSourcePodTemplate", "sourcePodName", sourcePodName)
+	retrievedPod, err := r.checkPodExist(clientset, sourcePodName)
 	if retrievedPod == nil {
 		return nil, err
 	} else {
@@ -302,7 +302,7 @@ func (r *LiveMigrationReconciler) getSourcePodTemplate(clientset *kubernetes.Cli
 func (r *LiveMigrationReconciler) removeCheckpointPod(ctx context.Context, clientset *kubernetes.Clientset, pod *corev1.Pod, snapshotPathCurrent, newPodName, namespace string) error {
 	if newPodName != "" {
 		for {
-			ok, _ := r.checkPodExist(clientset, newPodName, namespace)
+			ok, _ := r.checkPodExist(clientset, newPodName)
 			if ok != nil {
 				break
 			}
@@ -1062,7 +1062,7 @@ func (r *LiveMigrationReconciler) migratePod(ctx context.Context, pod *corev1.Po
 	klog.Infof("", "Live-migration", "Step 4 - Restore destPod from sourcePod's checkpointed info - completed")
 
 	for {
-		status, _ := r.checkPodExist(clientset, depl.Name, req.Namespace)
+		status, _ := r.checkPodExist(clientset, depl.Name)
 		if status != nil {
 			klog.Infof("", "Live-migration", "Step 4.1 - Check whether if newPod is Running or not - completed"+status.Name+string(status.Status.Phase))
 			break
