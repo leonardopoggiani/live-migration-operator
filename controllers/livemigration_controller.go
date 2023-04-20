@@ -84,10 +84,9 @@ func (r *LiveMigrationReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 	if migratingPod.Spec.Template.ObjectMeta.Name != "" {
 		template = &migratingPod.Spec.Template
 	} else {
-		var Err error
-		template, Err = r.getSourcePodTemplate(ctx, migratingPod.Spec.SourcePod, req.Namespace)
-		if Err != nil || template == nil {
-			klog.ErrorS(Err, "sourcePod not exist", "pod", migratingPod.Spec.SourcePod)
+		template, err = r.getSourcePodTemplate(ctx, migratingPod.Spec.SourcePod, req.Namespace)
+		if err != nil || template == nil {
+			klog.ErrorS(err, "sourcePod not exist", "pod", migratingPod.Spec.SourcePod)
 			// return ctrl.Result{}, Err
 		} else {
 			if migratingPod.Spec.DestHost != "" {
@@ -221,7 +220,6 @@ func (r *LiveMigrationReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 		}
 
 	*/
-	return ctrl.Result{}, nil
 }
 
 // SetupWithManager sets up the controller with the Manager.
@@ -269,6 +267,7 @@ func (r *LiveMigrationReconciler) deletePod(ctx context.Context, pod *corev1.Pod
 
 func (r *LiveMigrationReconciler) checkPodExist(ctx context.Context, name string, namespace string) (*corev1.Pod, error) {
 	podList := &corev1.PodList{}
+	klog.Infof("checkPodExist", "pod", name, "namespace", namespace)
 	if err := r.List(ctx, podList, client.InNamespace(namespace)); err != nil {
 		klog.ErrorS(err, "unable to list pods", "pod", name)
 		return nil, err
@@ -309,6 +308,7 @@ func (r *LiveMigrationReconciler) checkPodExist(ctx context.Context, name string
 }
 
 func (r *LiveMigrationReconciler) getSourcePodTemplate(ctx context.Context, sourcePodName string, namespace string) (*corev1.PodTemplateSpec, error) {
+	klog.Infof("", "getSourcePodTemplate", "sourcePodName", sourcePodName, "namespace", namespace)
 	sourcePod, err := r.checkPodExist(ctx, sourcePodName, namespace)
 	if sourcePod == nil {
 		return nil, err
