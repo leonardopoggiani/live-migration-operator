@@ -116,11 +116,6 @@ func (r *LiveMigrationReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 			if err != nil {
 				return ctrl.Result{}, err
 			}
-
-			klog.Infof("", "annotations ", annotations["snapshotPath"])
-
-			count, _, _ := r.getActualRunningPod(&childPods)
-			klog.Infof("", "number of actual running pod ", count)
 		}
 	}
 
@@ -133,6 +128,7 @@ func (r *LiveMigrationReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 		if fileExists {
 			// file exists, check if sourcePod exists
 			klog.Infof("", "file exists, check if sourcePod exists")
+			klog.Infof("", "annotations ", annotations["sourcePod"], "req.namespace", req.Namespace)
 			sourcePod, err := r.checkPodExist(ctx, annotations["sourcePod"], req.Namespace)
 			if err != nil || sourcePod == nil {
 				klog.ErrorS(err, "failed to get sourcePod", "pod", annotations["sourcePod"], "namespace", req.Namespace)
@@ -271,14 +267,17 @@ func (r *LiveMigrationReconciler) deletePod(ctx context.Context, pod *corev1.Pod
 	return nil
 }
 
-func (r *LiveMigrationReconciler) checkPodExist(ctx context.Context, name, namespace string) (*corev1.Pod, error) {
-	var childPods corev1.PodList
-	if err := r.List(ctx, &childPods, client.InNamespace(namespace)); err != nil {
+func (r *LiveMigrationReconciler) checkPodExist(ctx context.Context, name string, namespace string) (*corev1.Pod, error) {
+	podList := &corev1.PodList{}
+	if err := r.List(ctx, podList, client.InNamespace(namespace)); err != nil {
+		klog.ErrorS(err, "unable to list pods", "pod", name)
 		return nil, err
 	}
-	if len(childPods.Items) > 0 {
-		for _, pod := range childPods.Items {
+	if len(podList.Items) > 0 {
+		klog.Infof("", "podList", podList.Items)
+		for _, pod := range podList.Items {
 			if pod.Name == name && pod.Status.Phase == "Running" {
+				klog.Infof("", "pod", pod)
 				return &pod, nil
 			}
 		}
