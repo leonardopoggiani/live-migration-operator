@@ -97,7 +97,6 @@ func (r *LiveMigrationReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 			desiredLabels["migratingPod"] = migratingPod.Name
 
 			annotations = getPodsAnnotationSet(&migratingPod, template)
-			klog.Infof("", "annotations ", annotations)
 
 			// Then list all pods controlled by the LiveMigration resource object
 			var childPods corev1.PodList
@@ -127,15 +126,32 @@ func (r *LiveMigrationReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 		if fileExists {
 			// file exists, check if sourcePod exists
 			klog.Infof("", "file exists, check if sourcePod exists")
-			klog.Infof("", "annotations ", annotations["sourcePod"], "req.namespace", req.Namespace)
+			klog.Infof("", "annotations ", annotations["sourcePod"])
 			sourcePod, err := r.checkPodExist(clientset, annotations["sourcePod"])
 			if err != nil || sourcePod == nil {
-				klog.ErrorS(err, "failed to get sourcePod", "pod", annotations["sourcePod"], "namespace", req.Namespace)
+				klog.ErrorS(err, "failed to get sourcePod", "pod", annotations["sourcePod"])
 				klog.Infof("But file exists, so it's a restore process")
 
 				// TODO: restore process
+				// r.restore(..)
 			}
 
+			if sourcePod != nil {
+				// sourcePod exists, trigger migration
+				klog.Infof("", "sourcePod exists, trigger migration")
+				_, err = r.migratePod(ctx, liveMigratingPod, depl, clientset, sourcePod, req, &migratingPod)
+				if err != nil {
+					klog.ErrorS(err, "failed to migrate pod", "pod", sourcePod.Name)
+					return ctrl.Result{}, err
+				}
+
+				klog.InfoS("Pod migration triggered", "pod", sourcePod.Name)
+				return ctrl.Result{}, nil
+			}
+		} else {
+			klog.Infof("", "file not exists, check if sourcePod exists")
+			klog.Infof("", "annotations ", annotations["sourcePod"])
+			sourcePod, err := r.checkPodExist(clientset, annotations["sourcePod"])
 			if sourcePod != nil {
 				// sourcePod exists, trigger migration
 				klog.Infof("", "sourcePod exists, trigger migration")
