@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"k8s.io/apimachinery/pkg/util/intstr"
+	"log"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -131,89 +132,76 @@ func (r *LiveMigrationReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 	if annotations["snapshotPolicy"] == "live-migration" && annotations["sourcePod"] != "" {
 		// We are live-migrate a running pod here - Hot scale
 		klog.Infof("", "live-migrate a running pod")
-		// Step1: Check source pod is exist or not clean previous source pod checkpoint/rtore annotations and snapshotPath
+
+		/*
+			// sourcePod does not exist, wait for file creation
+			    for {
+			        fileExists, err := r.checkFileExist("/checkpoints")
+			        if err != nil {
+			            klog.ErrorS(err, "failed to check file existence")
+			            return ctrl.Result{}, err
+			        }
+
+			        if fileExists {
+			            // file exists, check if sourcePod exists
+			            sourcePod, err = r.checkPodExist(ctx, annotations["sourcePod"], req.Namespace)
+			            if err != nil {
+			                klog.ErrorS(err, "failed to get sourcePod", "pod", annotations["sourcePod"])
+			                return ctrl.Result{}, err
+			            }
+
+			            if sourcePod != nil {
+			                // sourcePod exists, trigger migration
+			                err = r.migratePod(sourcePod, annotations["destinationNode"])
+			                if err != nil {
+			                    klog.ErrorS(err, "failed to migrate pod", "pod", sourcePod.Name)
+			                    return ctrl.Result{}, err
+			                }
+
+			                klog.InfoS("Pod migration triggered", "pod", sourcePod.Name)
+			                return ctrl.Result{}, nil
+			            }
+			        }
+
+			        time.Sleep(10 * time.Second)
+			    }
+		*/
+
+		// Step1: Check source pod is exist or not clean previous source pod checkpoint/restore annotations and snapshotPath
 		sourcePod, err := r.checkPodExist(ctx, annotations["sourcePod"], req.Namespace)
 		if err != nil || sourcePod == nil {
 			klog.ErrorS(err, "sourcePod not exist", "pod", annotations["sourcePod"])
-			return ctrl.Result{}, err
+			for {
+				fileExists := checkFileExist("/checkpoints")
+
+				if fileExists {
+					// file exists, check if sourcePod exists
+					sourcePod, err = r.checkPodExist(ctx, annotations["sourcePod"], req.Namespace)
+					if err != nil || sourcePod == nil {
+						klog.ErrorS(err, "failed to get sourcePod", "pod", annotations["sourcePod"])
+						klog.Infof("But file exists, so it's a restore process")
+
+					}
+
+					if sourcePod != nil {
+						// sourcePod exists, trigger migration
+						_, err = r.migratePod(ctx, pod, depl, clientset, sourcePod, req, &migratingPod)
+						if err != nil {
+							klog.ErrorS(err, "failed to migrate pod", "pod", sourcePod.Name)
+							return ctrl.Result{}, err
+						}
+
+						klog.InfoS("Pod migration triggered", "pod", sourcePod.Name)
+						return ctrl.Result{}, nil
+					}
+				}
+
+				time.Sleep(10 * time.Second)
+			}
 		}
 
-		klog.Infof("", "Live-migration", "Step 1 - Check source pod is exist or not - completed")
-		klog.Infof("", "sourcePod status ", sourcePod.Status.Phase)
-
-		containers, err := PrintContainerIDs(clientset, req.Namespace)
-		pathToClear := "/tmp/checkpoints/checkpoints"
-
-		err = os.Chmod(pathToClear, 0777)
-		if err != nil {
-			klog.ErrorS(err, "unable to change checkpoint folder permission")
-		} else {
-			klog.InfoS("changed checkpoint folder permission")
-		}
-
-		if _, err = exec.Command("sudo", "rm", "-rf", pathToClear).CombinedOutput(); err != nil {
-			klog.ErrorS(err, "unable to delete checkpoint folder")
-		} else {
-			klog.InfoS("deleted checkpoint folder")
-		}
-
-		// Get the current user's UID and GID
-		uid := os.Getuid()
-		gid := os.Getgid()
-
-		// Change the ownership of the directory to the current user
-		err = os.Mkdir(pathToClear, 0777)
-		if err != nil {
-			return ctrl.Result{}, err
-		}
-		err = r.checkpointPodCrio(containers, req.Namespace, migratingPod.Name)
-		if err != nil {
-			klog.ErrorS(err, "unable to checkpoint")
-		}
-
-		err = os.Chown(pathToClear, uid, gid)
-		if err != nil {
-			klog.ErrorS(err, "unable to change checkpoint folder permission")
-		} else {
-			klog.InfoS("changed checkpoint folder permission")
-		}
 	}
 
-	klog.Infof("", "Live-migration", "Step 2 - checkpoint source Pod - completed")
-
-	err = r.terminateCheckpointedPod(ctx, migratingPod.Name, req.Namespace, clientset)
-	if err != nil {
-		klog.ErrorS(err, "unable to terminate checkpointed pod", "pod", migratingPod.Name)
-	} else {
-		klog.Infof("checkpointed pod terminated")
-	}
-
-	dir := "/tmp/checkpoints/checkpoints"
-	files, err := os.ReadDir(dir)
-	if err != nil {
-		klog.ErrorS(err, "unable to read dir", "dir", dir)
-	}
-
-	_, err = r.buildahCheckpointRestore(ctx, pod, depl.Name, depl.Namespace, files, dir)
-	if err != nil {
-		klog.ErrorS(err, "unable to restore", "pod", migratingPod.Name, "destinationHost", migratingPod.Spec.DestHost)
-	} else {
-		klog.Infof("pod restored")
-	}
-
-	klog.Infof("", "Live-migration", "Step 4 - Restore destPod from sourcePod's checkpointed info - completed")
-
-	for {
-		status, _ := r.checkPodExist(ctx, depl.Name, req.Namespace)
-		if status != nil {
-			klog.Infof("", "Live-migration", "Step 4.1 - Check whether if newPod is Running or not - completed"+status.Name+string(status.Status.Phase))
-			break
-		} else {
-			time.Sleep(200 * time.Millisecond)
-		}
-	}
-
-	klog.Infof("", "Live-migration", "Step 4.1 - Check whether if newPod is Running or not - completed")
 	// Step5: Clean checkpointpod process and checkpointPath
 	// if err := r.removeCheckpointPod(ctx, sourcePod, "/var/lib/kubelet/migration/", newPod.Name, req.Namespace); err != nil {
 	// 	klog.ErrorS(err, "unable to remove checkpoint", "pod", sourcePod)
@@ -450,6 +438,15 @@ func (r *LiveMigrationReconciler) checkpointPodCrio(containers []Container, name
 type Container struct {
 	ID   string
 	Name string
+}
+
+func checkFileExist(path string) bool {
+	files, err := os.ReadDir(path)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	return len(files) > 0
 }
 
 func PrintContainerIDs(clientset *kubernetes.Clientset, namespace string) ([]Container, error) {
@@ -1074,4 +1071,83 @@ func (r *LiveMigrationReconciler) buildahCheckpointRestore(ctx context.Context, 
 	}
 
 	return pod, nil
+}
+
+func (r *LiveMigrationReconciler) migratePod(ctx context.Context, pod *corev1.Pod, depl *appsv1.Deployment, clientset *kubernetes.Clientset, sourcePod *corev1.Pod, req ctrl.Request, migratingPod *api.LiveMigration) (ctrl.Result, error) {
+	klog.Infof("", "Live-migration", "Step 1 - Check source pod is exist or not - completed")
+	klog.Infof("", "sourcePod status ", sourcePod.Status.Phase)
+
+	containers, err := PrintContainerIDs(clientset, req.Namespace)
+	pathToClear := "/tmp/checkpoints/checkpoints"
+
+	err = os.Chmod(pathToClear, 0777)
+	if err != nil {
+		klog.ErrorS(err, "unable to change checkpoint folder permission")
+	} else {
+		klog.InfoS("changed checkpoint folder permission")
+	}
+
+	if _, err = exec.Command("sudo", "rm", "-rf", pathToClear).CombinedOutput(); err != nil {
+		klog.ErrorS(err, "unable to delete checkpoint folder")
+	} else {
+		klog.InfoS("deleted checkpoint folder")
+	}
+
+	// Get the current user's UID and GID
+	uid := os.Getuid()
+	gid := os.Getgid()
+
+	// Change the ownership of the directory to the current user
+	err = os.Mkdir(pathToClear, 0777)
+	if err != nil {
+		return ctrl.Result{}, err
+	}
+	err = r.checkpointPodCrio(containers, req.Namespace, migratingPod.Name)
+	if err != nil {
+		klog.ErrorS(err, "unable to checkpoint")
+	}
+
+	err = os.Chown(pathToClear, uid, gid)
+	if err != nil {
+		klog.ErrorS(err, "unable to change checkpoint folder permission")
+	} else {
+		klog.InfoS("changed checkpoint folder permission")
+	}
+
+	klog.Infof("", "Live-migration", "Step 2 - checkpoint source Pod - completed")
+
+	err = r.terminateCheckpointedPod(ctx, migratingPod.Name, req.Namespace, clientset)
+	if err != nil {
+		klog.ErrorS(err, "unable to terminate checkpointed pod", "pod", migratingPod.Name)
+	} else {
+		klog.Infof("checkpointed pod terminated")
+	}
+
+	dir := "/tmp/checkpoints/checkpoints"
+	files, err := os.ReadDir(dir)
+	if err != nil {
+		klog.ErrorS(err, "unable to read dir", "dir", dir)
+	}
+
+	_, err = r.buildahCheckpointRestore(ctx, pod, depl.Name, depl.Namespace, files, dir)
+	if err != nil {
+		klog.ErrorS(err, "unable to restore", "pod", migratingPod.Name, "destinationHost", migratingPod.Spec.DestHost)
+	} else {
+		klog.Infof("pod restored")
+	}
+
+	klog.Infof("", "Live-migration", "Step 4 - Restore destPod from sourcePod's checkpointed info - completed")
+
+	for {
+		status, _ := r.checkPodExist(ctx, depl.Name, req.Namespace)
+		if status != nil {
+			klog.Infof("", "Live-migration", "Step 4.1 - Check whether if newPod is Running or not - completed"+status.Name+string(status.Status.Phase))
+			break
+		} else {
+			time.Sleep(200 * time.Millisecond)
+		}
+	}
+
+	klog.Infof("", "Live-migration", "Step 4.1 - Check whether if newPod is Running or not - completed")
+	return ctrl.Result{}, nil
 }
