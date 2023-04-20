@@ -124,6 +124,7 @@ func (r *LiveMigrationReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 	klog.Infof("", "Migrate or restore a running pod")
 
 	for {
+		klog.Infof("", "check if file exists")
 		fileExists := checkFileExist("/checkpoints")
 
 		if fileExists {
@@ -151,6 +152,7 @@ func (r *LiveMigrationReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 			}
 		}
 
+		klog.Infof("wait and retry..")
 		time.Sleep(10 * time.Second)
 	}
 
