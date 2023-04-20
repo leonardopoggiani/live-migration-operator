@@ -627,7 +627,7 @@ func (r *LiveMigrationReconciler) buildahCheckpointRestore(ctx context.Context, 
 			klog.ErrorS(err, "failed to create Kubernetes client")
 		}
 
-		_, err = clientset.CoreV1().Pods("default").Get(ctx, "dummy-pod", metav1.GetOptions{})
+		_, err = clientset.CoreV1().Pods("liqo-demo").Get(ctx, "dummy-pod", metav1.GetOptions{})
 		if err != nil {
 			klog.ErrorS(err, "failed to get dummy pod")
 
@@ -635,7 +635,7 @@ func (r *LiveMigrationReconciler) buildahCheckpointRestore(ctx context.Context, 
 			pod := &corev1.Pod{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "dummy-pod",
-					Namespace: "default",
+					Namespace: "liqo-demo",
 					Labels:    map[string]string{"app": "dummy-pod"},
 				},
 				Spec: corev1.PodSpec{
@@ -671,9 +671,9 @@ func (r *LiveMigrationReconciler) buildahCheckpointRestore(ctx context.Context, 
 				},
 			}
 
-			_, err = clientset.CoreV1().Pods("default").Create(ctx, pod, metav1.CreateOptions{})
+			_, err = clientset.CoreV1().Pods("liqo-demo").Create(ctx, pod, metav1.CreateOptions{})
 
-			err = r.waitForContainerReady(pod.Name, "default", "dummy-container", clientset)
+			err = r.waitForContainerReady(pod.Name, "liqo-demo", "dummy-container", clientset)
 
 			if err != nil {
 				klog.ErrorS(err, "failed to wait for container ready")
@@ -688,14 +688,14 @@ func (r *LiveMigrationReconciler) buildahCheckpointRestore(ctx context.Context, 
 			klog.Infof("dummy pod found")
 		}
 
-		dummyService, err := clientset.CoreV1().Services("default").Get(ctx, "dummy-service", metav1.GetOptions{})
+		dummyService, err := clientset.CoreV1().Services("liqo-demo").Get(ctx, "dummy-service", metav1.GetOptions{})
 		if err != nil {
 			klog.ErrorS(err, "failed to get dummy service")
 
 			service := &corev1.Service{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "dummy-service",
-					Namespace: "default",
+					Namespace: "liqo-demo",
 				},
 				Spec: corev1.ServiceSpec{
 					Ports: []corev1.ServicePort{
@@ -711,7 +711,7 @@ func (r *LiveMigrationReconciler) buildahCheckpointRestore(ctx context.Context, 
 				},
 			}
 
-			dummyService, err = clientset.CoreV1().Services("default").Create(ctx, service, metav1.CreateOptions{})
+			dummyService, err = clientset.CoreV1().Services("liqo-demo").Create(ctx, service, metav1.CreateOptions{})
 			if err != nil {
 				klog.ErrorS(err, "failed to create service")
 			} else {
