@@ -75,7 +75,7 @@ func (r *LiveMigrationReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 	}
 
 	var template *corev1.PodTemplateSpec
-	var pod *corev1.Pod
+	var liveMigratingPod *corev1.Pod
 	var depl *appsv1.Deployment
 	var annotations map[string]string
 
@@ -106,7 +106,7 @@ func (r *LiveMigrationReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 				return ctrl.Result{}, err
 			}
 
-			pod, err = r.desiredPod(migratingPod, &migratingPod, req.Namespace, template)
+			liveMigratingPod, err = r.desiredPod(migratingPod, &migratingPod, req.Namespace, template)
 			if err != nil {
 				return ctrl.Result{}, err
 			}
@@ -139,7 +139,7 @@ func (r *LiveMigrationReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 			if sourcePod != nil {
 				// sourcePod exists, trigger migration
 				klog.Infof("", "sourcePod exists, trigger migration")
-				_, err = r.migratePod(ctx, pod, depl, clientset, sourcePod, req, &migratingPod)
+				_, err = r.migratePod(ctx, liveMigratingPod, depl, clientset, sourcePod, req, &migratingPod)
 				if err != nil {
 					klog.ErrorS(err, "failed to migrate pod", "pod", sourcePod.Name)
 					return ctrl.Result{}, err
@@ -273,9 +273,10 @@ func (r *LiveMigrationReconciler) checkPodExist(ctx context.Context, name string
 		return nil, err
 	}
 	if len(podList.Items) > 0 {
-		for _, pod := range podList.Items {
-			if pod.Name == name && pod.Status.Phase == "Running" {
-				return &pod, nil
+		for _, podItem := range podList.Items {
+			if podItem.Name == name && podItem.Status.Phase == "Running" {
+				klog.Infof("running pod found")
+				return &podItem, nil
 			}
 		}
 	}
