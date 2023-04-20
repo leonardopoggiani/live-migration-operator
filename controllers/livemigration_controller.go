@@ -273,14 +273,11 @@ func (r *LiveMigrationReconciler) checkPodExist(ctx context.Context, name string
 		return nil, err
 	}
 	if len(podList.Items) > 0 {
-		klog.Infof("", "podList", podList.Items)
 		for _, pod := range podList.Items {
 			if pod.Name == name && pod.Status.Phase == "Running" {
-				klog.Infof("", "pod", pod)
 				return &pod, nil
 			}
 		}
-
 	}
 	return nil, nil
 
@@ -312,6 +309,8 @@ func (r *LiveMigrationReconciler) getSourcePodTemplate(ctx context.Context, sour
 	sourcePod, err := r.checkPodExist(ctx, sourcePodName, namespace)
 	if sourcePod == nil {
 		return nil, err
+	} else {
+		klog.Infof("", "getSourcePodTemplate", "sourcePod", sourcePod.Name)
 	}
 
 	pod := sourcePod.DeepCopy()
