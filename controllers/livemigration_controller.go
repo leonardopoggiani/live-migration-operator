@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"log"
 	"os"
@@ -266,22 +267,15 @@ func (r *LiveMigrationReconciler) deletePod(ctx context.Context, pod *corev1.Pod
 }
 
 func (r *LiveMigrationReconciler) checkPodExist(ctx context.Context, name string, namespace string) (*corev1.Pod, error) {
-	pods := &corev1.PodList{}
 	klog.Infof("checkPodExist", "pod", name, "namespace", namespace)
-	if err := r.List(ctx, pods, client.InNamespace(namespace)); err != nil {
-		klog.ErrorS(err, "unable to list pods", "pod", name)
+	pod := &corev1.Pod{}
+	err := r.Get(ctx, types.NamespacedName{Name: name, Namespace: namespace}, pod)
+	if err != nil {
+		klog.ErrorS(err, "unable to fetch Pod", "pod", name)
 		return nil, err
+	} else {
+		return pod, nil
 	}
-	if len(pods.Items) > 0 {
-		klog.Infof("pod found", "pod", name)
-		for _, podItem := range pods.Items {
-			if podItem.Name == name && podItem.Status.Phase == "Running" {
-				klog.Infof("running pod found")
-				return &podItem, nil
-			}
-		}
-	}
-	return nil, nil
 
 	/* alternative function
 	   // Watch for changes to the pod's status
