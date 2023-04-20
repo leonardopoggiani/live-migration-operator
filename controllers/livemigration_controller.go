@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"log"
 	"os"
@@ -85,7 +84,7 @@ func (r *LiveMigrationReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 	if migratingPod.Spec.Template.ObjectMeta.Name != "" {
 		template = &migratingPod.Spec.Template
 	} else {
-		template, err = r.getSourcePodTemplate(ctx, migratingPod.Spec.SourcePod, req.Namespace)
+		template, err = r.getSourcePodTemplate(clientset, migratingPod.Spec.SourcePod, req.Namespace)
 		if err != nil || template == nil {
 			klog.ErrorS(err, "sourcePod not exist", "pod", migratingPod.Spec.SourcePod)
 			// return ctrl.Result{}, Err
@@ -129,7 +128,7 @@ func (r *LiveMigrationReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 			// file exists, check if sourcePod exists
 			klog.Infof("", "file exists, check if sourcePod exists")
 			klog.Infof("", "annotations ", annotations["sourcePod"], "req.namespace", req.Namespace)
-			sourcePod, err := r.checkPodExist(ctx, annotations["sourcePod"], req.Namespace)
+			sourcePod, err := r.checkPodExist(clientset, annotations["sourcePod"], req.Namespace)
 			if err != nil || sourcePod == nil {
 				klog.ErrorS(err, "failed to get sourcePod", "pod", annotations["sourcePod"], "namespace", req.Namespace)
 				klog.Infof("But file exists, so it's a restore process")
@@ -266,43 +265,22 @@ func (r *LiveMigrationReconciler) deletePod(ctx context.Context, pod *corev1.Pod
 	return nil
 }
 
-func (r *LiveMigrationReconciler) checkPodExist(ctx context.Context, name string, namespace string) (*corev1.Pod, error) {
+func (r *LiveMigrationReconciler) checkPodExist(clientset *kubernetes.Clientset, name string, namespace string) (*corev1.Pod, error) {
 	klog.Infof("checkPodExist", "pod", name, "namespace", namespace)
-	pod := &corev1.Pod{}
-	err := r.Get(ctx, types.NamespacedName{Name: name, Namespace: namespace}, pod)
+
+	existingPod, err := clientset.CoreV1().Pods(namespace).Get(context.Background(), name, metav1.GetOptions{})
 	if err != nil {
 		klog.ErrorS(err, "unable to fetch Pod", "pod", name)
 		return nil, err
 	} else {
-		return pod, nil
+		klog.Infof("", "pod exists", "pod", existingPod.Name)
+		return existingPod, nil
 	}
-
-	/* alternative function
-	   // Watch for changes to the pod's status
-	   podWatcher, err := clientset.CoreV1().Pods(req.Namespace).Watch(ctx, metav1.ListOptions{FieldSelector: "metadata.name=" + pod.Name})
-	   if err != nil {
-	       klog.ErrorS(err, "failed to watch pod")
-	       return ctrl.Result{}, err
-	   }
-	   defer podWatcher.Stop()
-
-	   // Wait for the pod to be running
-	   for event := range podWatcher.ResultChan() {
-	       if event.Type == watch.Modified {
-	           updatedPod := event.Object.(*corev1.Pod)
-	           if updatedPod.Status.Phase == corev1.PodRunning {
-	               klog.InfoS("pod is running")
-	               break
-	           }
-	       }
-	   }
-
-	*/
 }
 
-func (r *LiveMigrationReconciler) getSourcePodTemplate(ctx context.Context, sourcePodName string, namespace string) (*corev1.PodTemplateSpec, error) {
+func (r *LiveMigrationReconciler) getSourcePodTemplate(clientset *kubernetes.Clientset, sourcePodName string, namespace string) (*corev1.PodTemplateSpec, error) {
 	klog.Infof("", "getSourcePodTemplate", "sourcePodName", sourcePodName, "namespace", namespace)
-	retrievedPod, err := r.checkPodExist(ctx, sourcePodName, namespace)
+	retrievedPod, err := r.checkPodExist(clientset, sourcePodName, namespace)
 	if retrievedPod == nil {
 		return nil, err
 	} else {
@@ -321,10 +299,10 @@ func (r *LiveMigrationReconciler) getSourcePodTemplate(ctx context.Context, sour
 	return template, nil
 }
 
-func (r *LiveMigrationReconciler) removeCheckpointPod(ctx context.Context, pod *corev1.Pod, snapshotPathCurrent, newPodName, namespace string) error {
+func (r *LiveMigrationReconciler) removeCheckpointPod(ctx context.Context, clientset *kubernetes.Clientset, pod *corev1.Pod, snapshotPathCurrent, newPodName, namespace string) error {
 	if newPodName != "" {
 		for {
-			ok, _ := r.checkPodExist(ctx, newPodName, namespace)
+			ok, _ := r.checkPodExist(clientset, newPodName, namespace)
 			if ok != nil {
 				break
 			}
@@ -1084,7 +1062,7 @@ func (r *LiveMigrationReconciler) migratePod(ctx context.Context, pod *corev1.Po
 	klog.Infof("", "Live-migration", "Step 4 - Restore destPod from sourcePod's checkpointed info - completed")
 
 	for {
-		status, _ := r.checkPodExist(ctx, depl.Name, req.Namespace)
+		status, _ := r.checkPodExist(clientset, depl.Name, req.Namespace)
 		if status != nil {
 			klog.Infof("", "Live-migration", "Step 4.1 - Check whether if newPod is Running or not - completed"+status.Name+string(status.Status.Phase))
 			break
