@@ -147,7 +147,7 @@ func (r *LiveMigrationReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 
 				// delete checkpoint
 				deleteCmd := exec.Command("sudo", "rm", "-rf", "/checkpoints/*")
-				_, err = deleteCmd.Output()
+				_, err = deleteCmd.CombinedOutput()
 				if err != nil {
 					klog.ErrorS(err, "failed to delete checkpoint")
 				} else {
