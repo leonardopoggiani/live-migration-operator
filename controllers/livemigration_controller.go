@@ -80,7 +80,12 @@ func (r *LiveMigrationReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 		template, err = r.getSourcePodTemplate(clientset, migratingPod.Spec.SourcePod)
 		if err != nil || template == nil {
 			klog.ErrorS(err, "sourcePod not exist", "pod", migratingPod.Spec.SourcePod)
-			// return ctrl.Result{}, Err
+			err = r.createDummyPod(clientset, ctx)
+			if err != nil {
+				klog.ErrorS(err, "failed to create dummy pod")
+			} else {
+				klog.Infof("dummy pod created")
+			}
 		} else {
 			if migratingPod.Spec.DestHost != "" {
 				template.Spec.NodeSelector = map[string]string{"kubernetes.io/hostname": migratingPod.Spec.DestHost}
@@ -253,20 +258,18 @@ func (r *LiveMigrationReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 				if err != nil {
 					klog.ErrorS(err, "failed to get sourcePod", "pod", annotations["sourcePod"])
 					return
-				} else {
-					klog.Infof("sourcePod exists, trigger migration")
 				}
 				if sourcePod != nil {
 					_, err = r.migratePod(ctx, clientset, &migratingPod)
 					if err != nil {
 						klog.ErrorS(err, "failed to migrate pod", "pod", sourcePod.Name)
 						return
-					} else {
-						klog.Infof("migration done")
 					}
 					migrationDone <- struct{}{}
 					klog.Infof("migration done")
 					return
+				} else {
+					klog.Infof("sourcePod not found yet, wait and retry..")
 				}
 			default:
 				klog.Infof("wait and retry..")
