@@ -138,11 +138,11 @@ func (r *LiveMigrationReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 					klog.ErrorS(err, "failed to create dummy pod")
 				}
 
-				restore, err := r.buildahRestore(ctx, "/checkpoints/")
+				restoredPod, err := r.buildahRestore(ctx, "/checkpoints/")
 				if err != nil {
 					return ctrl.Result{}, err
 				} else {
-					klog.Infof("restore result ", restore.Status)
+					klog.Infof("restore result ", restoredPod.Status)
 				}
 
 				// delete checkpoint
@@ -155,7 +155,7 @@ func (r *LiveMigrationReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 				}
 
 				for {
-					status, _ := r.checkPodExist(clientset, sourcePod.Name)
+					status, _ := r.checkPodExist(clientset, restoredPod.Name)
 					if status != nil {
 						klog.Infof("", "Live-migration", "Step 4.1 - Check whether if newPod is Running or not - completed"+status.Name+string(status.Status.Phase))
 						break
