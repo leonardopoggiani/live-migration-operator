@@ -1209,8 +1209,8 @@ func (r *LiveMigrationReconciler) buildahRestore(ctx context.Context, path strin
 		}
 
 		// Use regular expression to extract string between "checkpoint-" and the next "-" character
-		re := regexp.MustCompile(`checkpoint-(.+?)-`)
-		match := re.FindStringSubmatch(containerName)
+		re := regexp.MustCompile(`checkpoint-(.+?)_`)
+		match := re.FindStringSubmatch(checkpointPath)
 		if len(match) > 1 {
 			klog.Infof("pod name:", match[1])
 		} else {
