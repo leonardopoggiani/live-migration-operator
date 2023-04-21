@@ -1262,8 +1262,6 @@ func (r *LiveMigrationReconciler) buildahRestore(ctx context.Context, path strin
 		},
 	}
 
-	pod.ObjectMeta.Annotations["snapshotPolicy"] = "restore"
-
 	if err := r.Create(ctx, pod); err != nil {
 		klog.ErrorS(err, "failed to create restored pod", "podName", podName)
 	} else {
