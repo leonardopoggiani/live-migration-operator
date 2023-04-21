@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"github.com/fsnotify/fsnotify"
 	"k8s.io/apimachinery/pkg/util/intstr"
-	"log"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -207,7 +206,7 @@ func (r *LiveMigrationReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 	// Start a goroutine to watch for file events
 	watcher, err := fsnotify.NewWatcher()
 	if err != nil {
-		log.Fatal(err)
+		klog.ErrorS(err, "failed to create watcher")
 	}
 	defer func(watcher *fsnotify.Watcher) {
 		err := watcher.Close()
@@ -236,6 +235,8 @@ func (r *LiveMigrationReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 	err = watcher.Add("/checkpoints/")
 	if err != nil {
 		klog.ErrorS(err, "failed to add watcher")
+	} else {
+		klog.Infof("watcher added")
 	}
 
 	// Start a goroutine to check for the sourcePod in a loop
@@ -249,12 +250,16 @@ func (r *LiveMigrationReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 				if err != nil {
 					klog.ErrorS(err, "failed to get sourcePod", "pod", annotations["sourcePod"])
 					return
+				} else {
+					klog.Infof("sourcePod exists, trigger migration")
 				}
 				if sourcePod != nil {
 					_, err = r.migratePod(ctx, clientset, &migratingPod)
 					if err != nil {
 						klog.ErrorS(err, "failed to migrate pod", "pod", sourcePod.Name)
 						return
+					} else {
+						klog.Infof("migration done")
 					}
 					migrationDone <- struct{}{}
 					return
