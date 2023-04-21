@@ -52,6 +52,7 @@ func handleFile(w http.ResponseWriter, r *http.Request) {
 	} else if r.Method == "GET" {
 		klog.Infof("Debug GET request received.")
 		http.Error(w, "Debug GET request received.", http.StatusOK)
+		return
 	}
 
 	http.Error(w, "Method not allowed.", http.StatusMethodNotAllowed)
