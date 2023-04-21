@@ -16,9 +16,6 @@ RUN echo "machine github.com login $GITHUB_TOKEN" > ~/.netrc && \
     chmod 600 ~/.netrc && \
     go env -w GOPRIVATE=github.com/leonardopoggiani/*
 
-RUN go get -u github.com/leonardopoggiani/live-migration-operator && \
-    go get -u github.com/leonardopoggiani/live-migration-operator/storage-provisioner
-
 RUN go build -mod=readonly -o live-migration-operator ./api-server/cmd/main.go
 
 # Start the API server

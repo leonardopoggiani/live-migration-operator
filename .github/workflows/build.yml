@@ -61,12 +61,6 @@ jobs:
       - name: Set GOPRIVATE environment variable
         run: echo "export GOPRIVATE=github.com/leonardopoggiani" >> $GITHUB_ENV
 
-      - name: Delete go.mod
-        run: |
-          rm go.mod
-          rm go.sum
-          go mod init github.com/leonardopoggiani/live-migration-operator
-
       - name: Install dependencies
         run: |
           sudo apt update
@@ -74,16 +68,6 @@ jobs:
           git remote set-url origin git@github.com:leonardopoggiani/live-migration-operator.git
           go env -w GOPRIVATE=github.com/leonardopoggiani/*
           git config --global --add url."git@github.com:".insteadOf "https://github.com/"
-
-      - name: Install main dependencies
-        run: |
-          go get github.com/leonardopoggiani/live-migration-operator/storage-provisioner
-          go get github.com/leonardopoggiani/live-migration-operator
-
-      - name: Update dependencies
-        run: |
-          go get -u github.com/containers/buildah
-          go mod tidy
 
       - name: Go Format
         run: gofmt -s -w .
