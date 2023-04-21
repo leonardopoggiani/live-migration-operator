@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"time"
 
@@ -137,7 +138,7 @@ func (r *LiveMigrationReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 					klog.ErrorS(err, "failed to create dummy pod")
 				}
 
-				restore, err := r.buildahRestore(ctx, "/checkpoints/", sourcePod.Name)
+				restore, err := r.buildahRestore(ctx, "/checkpoints/")
 				if err != nil {
 					return ctrl.Result{}, err
 				} else {
@@ -151,6 +152,16 @@ func (r *LiveMigrationReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 					klog.ErrorS(err, "failed to delete checkpoint")
 				} else {
 					klog.Infof("checkpoint deleted")
+				}
+
+				for {
+					status, _ := r.checkPodExist(clientset, sourcePod.Name)
+					if status != nil {
+						klog.Infof("", "Live-migration", "Step 4.1 - Check whether if newPod is Running or not - completed"+status.Name+string(status.Status.Phase))
+						break
+					} else {
+						time.Sleep(200 * time.Millisecond)
+					}
 				}
 			}
 
@@ -1014,18 +1025,6 @@ func (r *LiveMigrationReconciler) migratePod(ctx context.Context, depl *appsv1.D
 		klog.Infof("pod restored")
 	}
 
-	klog.Infof("", "Live-migration", "Step 4 - Restore destPod from sourcePod's checkpointed info - completed")
-
-	for {
-		status, _ := r.checkPodExist(clientset, depl.Name)
-		if status != nil {
-			klog.Infof("", "Live-migration", "Step 4.1 - Check whether if newPod is Running or not - completed"+status.Name+string(status.Status.Phase))
-			break
-		} else {
-			time.Sleep(200 * time.Millisecond)
-		}
-	}
-
 	klog.Infof("", "Live-migration", "Step 4.1 - Check whether if newPod is Running or not - completed")
 	return ctrl.Result{}, nil
 }
@@ -1143,8 +1142,9 @@ func (r *LiveMigrationReconciler) getDummyServiceIPAndPort(clientset *kubernetes
 	return dummyService.Spec.ClusterIP, dummyService.Spec.Ports[0].Port
 }
 
-func (r *LiveMigrationReconciler) buildahRestore(ctx context.Context, path string, podName string) (*corev1.Pod, error) {
+func (r *LiveMigrationReconciler) buildahRestore(ctx context.Context, path string) (*corev1.Pod, error) {
 	var containersList []corev1.Container
+	var podName string
 
 	files, err := os.ReadDir(path)
 	if err != nil {
@@ -1207,6 +1207,17 @@ func (r *LiveMigrationReconciler) buildahRestore(ctx context.Context, path strin
 				}
 			}
 		}
+
+		// Use regular expression to extract string between "checkpoint-" and the next "-" character
+		re := regexp.MustCompile(`checkpoint-(.+?)-`)
+		match := re.FindStringSubmatch(containerName)
+		if len(match) > 1 {
+			klog.Infof("pod name:", match[1])
+		} else {
+			fmt.Println("No match found")
+		}
+
+		podName = match[1]
 
 		annotation := "--annotation=io.kubernetes.cri-o.annotations.checkpoint.name=" + containerName
 		klog.Infof("", "annotation", annotation)
