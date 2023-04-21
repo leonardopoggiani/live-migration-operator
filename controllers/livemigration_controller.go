@@ -267,16 +267,6 @@ func (r *LiveMigrationReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 			case <-stop:
 				klog.Infof("stop checking for sourcePod")
 				return
-			case pod := <-sourcePodDetected:
-				klog.Infof("pod detected", "pod", pod.Name)
-				_, err = r.migratePod(ctx, clientset, &migratingPod)
-				if err != nil {
-					klog.ErrorS(err, "failed to migrate pod", "pod", pod.Name)
-					return
-				}
-				migrationDone <- struct{}{}
-				klog.Infof("migration done")
-				return
 			default:
 				sourcePod, err := r.checkPodExist(clientset, annotations["sourcePod"])
 				if err != nil {
@@ -285,7 +275,14 @@ func (r *LiveMigrationReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 				}
 				if sourcePod != nil {
 					klog.Infof("sourcePod found", "pod", sourcePod.Name)
-					sourcePodDetected <- sourcePod
+					_, err = r.migratePod(ctx, clientset, &migratingPod)
+					if err != nil {
+						klog.ErrorS(err, "failed to migrate pod", "pod", sourcePod.Name)
+						return
+					}
+					migrationDone <- struct{}{}
+					klog.Infof("migration done")
+					return
 				} else {
 					klog.Infof("sourcePod not found yet, wait and retry..")
 					time.Sleep(5 * time.Second)
