@@ -231,6 +231,8 @@ func (r *LiveMigrationReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 			select {
 			case event := <-watcher.Events:
 				if event.Op&fsnotify.Create == fsnotify.Create {
+					klog.Infof("Event: %s", event.String())
+
 					if strings.Contains(event.Name, "/checkpoints/") {
 						klog.Infof("file created", "file", event.Name)
 
@@ -266,6 +268,7 @@ func (r *LiveMigrationReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 				klog.Infof("stop checking for sourcePod")
 				return
 			case pod := <-sourcePodDetected:
+				klog.Infof("pod detected", "pod", pod.Name)
 				_, err = r.migratePod(ctx, clientset, &migratingPod)
 				if err != nil {
 					klog.ErrorS(err, "failed to migrate pod", "pod", pod.Name)
@@ -281,10 +284,11 @@ func (r *LiveMigrationReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 					return
 				}
 				if sourcePod != nil {
+					klog.Infof("sourcePod found", "pod", sourcePod.Name)
 					sourcePodDetected <- sourcePod
 				} else {
 					klog.Infof("sourcePod not found yet, wait and retry..")
-					time.Sleep(10 * time.Second)
+					time.Sleep(5 * time.Second)
 				}
 			}
 		}
