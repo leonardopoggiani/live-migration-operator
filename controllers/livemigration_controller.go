@@ -86,6 +86,12 @@ func (r *LiveMigrationReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 			} else {
 				klog.Infof("dummy pod created")
 			}
+
+			// get the IP address of the Service
+			err = r.createDummyService(clientset, ctx)
+			if err != nil {
+				klog.ErrorS(err, "failed to create dummy service")
+			}
 		} else {
 			if migratingPod.Spec.DestHost != "" {
 				template.Spec.NodeSelector = map[string]string{"kubernetes.io/hostname": migratingPod.Spec.DestHost}
@@ -202,9 +208,6 @@ func (r *LiveMigrationReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 	// Use a channel to signal when a migration has been triggered
 	migrationDone := make(chan struct{})
 
-	// Use a channel to signal when a file has been detected
-	fileDetected := make(chan struct{})
-
 	// Use a channel to signal when the function should stop retrying
 	stop := make(chan struct{})
 
@@ -220,6 +223,9 @@ func (r *LiveMigrationReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 		}
 	}(watcher)
 
+	// Use a channel to signal when the sourcePod has been detected
+	sourcePodDetected := make(chan *corev1.Pod)
+
 	go func() {
 		for {
 			select {
@@ -227,7 +233,13 @@ func (r *LiveMigrationReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 				if event.Op&fsnotify.Create == fsnotify.Create {
 					if strings.Contains(event.Name, "/checkpoints/") {
 						klog.Infof("file created", "file", event.Name)
-						fileDetected <- struct{}{}
+
+						restoredPod, err := r.buildahRestore(ctx, "/checkpoints/")
+						if err != nil {
+							klog.ErrorS(err, "failed to restore pod")
+						} else {
+							klog.Infof("restore result ", restoredPod.Status)
+						}
 					}
 				}
 			case err := <-watcher.Errors:
@@ -253,38 +265,40 @@ func (r *LiveMigrationReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 			case <-stop:
 				klog.Infof("stop checking for sourcePod")
 				return
-			case <-fileDetected:
+			case pod := <-sourcePodDetected:
+				_, err = r.migratePod(ctx, clientset, &migratingPod)
+				if err != nil {
+					klog.ErrorS(err, "failed to migrate pod", "pod", pod.Name)
+					return
+				}
+				migrationDone <- struct{}{}
+				klog.Infof("migration done")
+				return
+			default:
 				sourcePod, err := r.checkPodExist(clientset, annotations["sourcePod"])
 				if err != nil {
 					klog.ErrorS(err, "failed to get sourcePod", "pod", annotations["sourcePod"])
 					return
 				}
 				if sourcePod != nil {
-					_, err = r.migratePod(ctx, clientset, &migratingPod)
-					if err != nil {
-						klog.ErrorS(err, "failed to migrate pod", "pod", sourcePod.Name)
-						return
-					}
-					migrationDone <- struct{}{}
-					klog.Infof("migration done")
-					return
+					sourcePodDetected <- sourcePod
 				} else {
 					klog.Infof("sourcePod not found yet, wait and retry..")
+					time.Sleep(10 * time.Second)
 				}
-			default:
-				klog.Infof("wait and retry..")
-				time.Sleep(10 * time.Second)
 			}
 		}
 	}()
 
 	// Wait for either the file or the sourcePod to be detected
 	select {
-	case <-fileDetected:
-		// Stop checking for the sourcePod
+	case <-sourcePodDetected:
+		// Stop watching for file events and checking for the sourcePod
+		err := watcher.Close()
+		if err != nil {
+			return ctrl.Result{}, err
+		}
 		close(stop)
-		// Wait for the migration to be triggered
-		<-migrationDone
 		return ctrl.Result{}, nil
 	case <-migrationDone:
 		// Stop watching for file events and checking for the sourcePod
@@ -591,12 +605,6 @@ func (r *LiveMigrationReconciler) migrateCheckpoint(ctx context.Context, files [
 	clientset, err := kubernetes.NewForConfig(kubeconfig)
 	if err != nil {
 		klog.ErrorS(err, "failed to create Kubernetes client")
-	}
-
-	// get the IP address of the Service
-	err = r.createDummyService(clientset, ctx)
-	if err != nil {
-		klog.ErrorS(err, "failed to create dummy service")
 	}
 
 	dummyIp, dummyPort := r.getDummyServiceIPAndPort(clientset, ctx)
