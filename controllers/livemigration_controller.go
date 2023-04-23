@@ -6,11 +6,13 @@ import (
 	"fmt"
 	"github.com/fsnotify/fsnotify"
 	"k8s.io/apimachinery/pkg/util/intstr"
+	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"regexp"
 	"strings"
+	"syscall"
 	"time"
 
 	api "github.com/leonardopoggiani/live-migration-operator/api/v1alpha1"
@@ -193,7 +195,8 @@ func (r *LiveMigrationReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 				}
 				if sourcePod != nil {
 					klog.Infof("sourcePod found", "pod", sourcePod.Name)
-					_, err = r.migratePod(ctx, clientset, &migratingPod)
+					// _, err = r.migratePod(ctx, clientset, &migratingPod)
+					_, err = r.migratePodDirectly(ctx, clientset, &migratingPod)
 					if err != nil {
 						klog.ErrorS(err, "failed to migrate pod", "pod", sourcePod.Name)
 						return
@@ -542,6 +545,64 @@ func (r *LiveMigrationReconciler) migrateCheckpoint(ctx context.Context, files [
 	}
 
 	return nil
+}
+
+func (r *LiveMigrationReconciler) migratePodDirectly(ctx context.Context, clientset *kubernetes.Clientset, migratingPod *api.LiveMigration) (ctrl.Result, error) {
+	pipePath := "/tmp/checkpoints/pipe"
+
+	offloadedIP, offloadedPort := r.getDummyServiceIPAndPort(clientset, ctx)
+	offloadedServiceURL := fmt.Sprintf("http://%s:%d/checkpoints", offloadedIP, offloadedPort)
+	podName := migratingPod.Name
+
+	klog.Infof("migratePodDirectly", "podName", podName, "offloadedServiceURL", offloadedServiceURL)
+
+	// create named pipe if it doesn't exist
+	if _, err := os.Stat(pipePath); os.IsNotExist(err) {
+		err := syscall.Mkfifo(pipePath, 0666)
+		if err != nil {
+			return ctrl.Result{}, err
+		}
+	}
+
+	// wait for offloaded service to become available
+	for {
+		if _, err := http.Get(offloadedServiceURL); err == nil {
+			break
+		}
+		time.Sleep(1 * time.Second)
+	}
+
+	// initiate checkpoint for pod
+	kubeletEndpoint := fmt.Sprintf("http://localhost:10255/pods/%s/checkpoint", podName)
+	checkpointCmd := exec.Command("sh", "-c", fmt.Sprintf("cat %s | curl -X POST -T - %s", pipePath, offloadedServiceURL))
+	checkpointCmd.Stdout = os.Stdout
+	checkpointCmd.Stderr = os.Stderr
+	if err := checkpointCmd.Start(); err != nil {
+		fmt.Printf("Error starting checkpoint command: %s\n", err)
+		os.Exit(1)
+	}
+
+	// redirect checkpoint data to named pipe
+	kubeletCmd := exec.Command("/usr/bin/kubelet", fmt.Sprintf("--pod-checkpoint-dir=%s", pipePath), fmt.Sprintf("--checkpoint=%s", kubeletEndpoint))
+	kubeletCmd.Stdout = os.Stdout
+	kubeletCmd.Stderr = os.Stderr
+	if err := kubeletCmd.Start(); err != nil {
+		fmt.Printf("Error starting kubelet command: %s\n", err)
+		os.Exit(1)
+	}
+
+	// wait for checkpoint command to finish
+	if err := checkpointCmd.Wait(); err != nil {
+		fmt.Printf("Error waiting for checkpoint command: %s\n", err)
+		os.Exit(1)
+	}
+
+	// kill kubelet command
+	if err := kubeletCmd.Process.Kill(); err != nil {
+		fmt.Printf("Error killing kubelet command: %s\n", err)
+	}
+
+	return ctrl.Result{}, nil
 }
 
 func (r *LiveMigrationReconciler) migratePod(ctx context.Context, clientset *kubernetes.Clientset, migratingPod *api.LiveMigration) (ctrl.Result, error) {

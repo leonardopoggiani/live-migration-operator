@@ -101,3 +101,11 @@ jobs:
       - name: Docker Push Storage Provisioner
         run: |
           docker push docker.io/leonardopoggiani/checkpoint-provisioner
+
+      - name: Docker Build File Handler
+        run: |
+          docker build -t docker.io/leonardopoggiani/file-handler -f file-handler/Dockerfile .
+
+      - name: Docker Push File Handler
+        run: |
+          docker push docker.io/leonardopoggiani/file-handler
