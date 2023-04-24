@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+	"sync"
 	"time"
 
 	api "github.com/leonardopoggiani/live-migration-operator/api/v1alpha1"
@@ -517,29 +518,68 @@ func (r *LiveMigrationReconciler) migrateCheckpoint(ctx context.Context, files [
 
 	dummyIp, dummyPort := r.getDummyServiceIPAndPort(clientset, ctx)
 
-	for _, file := range files {
-		checkpointPath := filepath.Join(dir, file.Name())
-		klog.Infof("checkpointPath: %s", checkpointPath)
+	/*
+		for _, file := range files {
+			checkpointPath := filepath.Join(dir, file.Name())
+			klog.Infof("checkpointPath: %s", checkpointPath)
 
-		// change permissions of checkpoint file
-		// sudo chmod +r /tmp/checkpoints/checkpoints/checkpoint-tomcat-pod_liqo-demo-tomcat-2023-04-18T09:39:13Z.tar
-		chmodCmd := exec.Command("sudo", "chmod", "+rwx", checkpointPath)
-		chmodOutput, err := chmodCmd.Output()
-		if err != nil {
-			klog.ErrorS(err, "failed to change permissions of checkpoint file", "checkpointPath", checkpointPath)
-		} else {
-			klog.Infof("checkpoint file permissions changed: %s", chmodOutput)
+			// change permissions of checkpoint file
+			// sudo chmod +r /tmp/checkpoints/checkpoints/checkpoint-tomcat-pod_liqo-demo-tomcat-2023-04-18T09:39:13Z.tar
+			chmodCmd := exec.Command("sudo", "chmod", "+rwx", checkpointPath)
+			chmodOutput, err := chmodCmd.Output()
+			if err != nil {
+				klog.ErrorS(err, "failed to change permissions of checkpoint file", "checkpointPath", checkpointPath)
+			} else {
+				klog.Infof("checkpoint file permissions changed: %s", chmodOutput)
+			}
+
+			postCmd := exec.Command("curl", "-X", "POST", "-F", fmt.Sprintf("file=@%s", checkpointPath), fmt.Sprintf("http://%s:%d/upload", dummyIp, dummyPort))
+			klog.Infof("post command", "cmd", postCmd.String())
+			postOut, err := postCmd.CombinedOutput()
+			if err != nil {
+				klog.ErrorS(err, "failed to post on the service", "service", "dummy-service")
+			} else {
+				klog.Infof("post on the service", "service", "dummy-service", "out", string(postOut))
+			}
 		}
 
-		postCmd := exec.Command("curl", "-X", "POST", "-F", fmt.Sprintf("file=@%s", checkpointPath), fmt.Sprintf("http://%s:%d/upload", dummyIp, dummyPort))
-		klog.Infof("post command", "cmd", postCmd.String())
-		postOut, err := postCmd.CombinedOutput()
-		if err != nil {
-			klog.ErrorS(err, "failed to post on the service", "service", "dummy-service")
-		} else {
-			klog.Infof("post on the service", "service", "dummy-service", "out", string(postOut))
-		}
+
+	*/
+
+	var wg sync.WaitGroup
+	for _, entry := range files {
+		wg.Add(1)
+		go func(entry os.DirEntry) {
+			defer wg.Done()
+			file, err := entry.Info()
+			if err != nil {
+				klog.ErrorS(err, "failed to get file info", "entry", entry.Name())
+				return
+			}
+			checkpointPath := filepath.Join(dir, file.Name())
+			klog.Infof("checkpointPath: %s", checkpointPath)
+
+			// change permissions of checkpoint file
+			// sudo chmod +r /tmp/checkpoints/checkpoints/checkpoint-tomcat-pod_liqo-demo-tomcat-2023-04-18T09:39:13Z.tar
+			chmodCmd := exec.Command("sudo", "chmod", "+rwx", checkpointPath)
+			chmodOutput, err := chmodCmd.Output()
+			if err != nil {
+				klog.ErrorS(err, "failed to change permissions of checkpoint file", "checkpointPath", checkpointPath)
+			} else {
+				klog.Infof("checkpoint file permissions changed: %s", chmodOutput)
+			}
+
+			postCmd := exec.Command("curl", "-X", "POST", "-F", fmt.Sprintf("file=@%s", checkpointPath), fmt.Sprintf("http://%s:%d/upload", dummyIp, dummyPort))
+			klog.Infof("post command", "cmd", postCmd.String())
+			postOut, err := postCmd.CombinedOutput()
+			if err != nil {
+				klog.ErrorS(err, "failed to post on the service", "service", "dummy-service")
+			} else {
+				klog.Infof("post on the service", "service", "dummy-service", "out", string(postOut))
+			}
+		}(entry)
 	}
+	wg.Wait()
 
 	// send a dummy file at the end to signal the end of the migration
 	createDummyFile := exec.Command("touch", "/tmp/checkpoints/checkpoints/dummy")
