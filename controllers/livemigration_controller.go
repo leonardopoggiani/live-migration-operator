@@ -155,7 +155,8 @@ func (r *LiveMigrationReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 					if strings.Contains(event.Name, "/checkpoints/") && strings.Contains(event.Name, "dummy") {
 						klog.Infof("file created", "file", event.Name)
 
-						restoredPod, err := r.buildahRestore(ctx, "/checkpoints/")
+						// restoredPod, err := r.buildahRestore(ctx, "/checkpoints/")
+						restoredPod, err := r.buildahRestoreParellelized(ctx, "/checkpoints/")
 						if err != nil {
 							klog.ErrorS(err, "failed to restore pod")
 						} else {
@@ -908,6 +909,195 @@ func (r *LiveMigrationReconciler) buildahRestore(ctx context.Context, path strin
 	}
 
 	return pod, nil
+}
+
+func (r *LiveMigrationReconciler) buildahRestoreParellelized(ctx context.Context, path string) (*corev1.Pod, error) {
+	var containersList []corev1.Container
+	var podName string
+
+	var wg sync.WaitGroup
+	files := getFiles(path) // Get list of files to process
+	// Create a channel to receive the results
+	results := make(chan error, len(files))
+	// Process each file in a separate goroutine
+	for _, file := range files {
+		wg.Add(1)
+		go func(file os.DirEntry) {
+			defer wg.Done()
+			var tmpList []corev1.Container
+			var err error
+
+			tmpList, podName, err = processFile(file, path)
+			if podName != "dummy" {
+				containersList = append(containersList, tmpList...)
+			} else {
+				return
+			}
+			if err != nil {
+				klog.ErrorS(err, "failed to process file", "file", file.Name())
+			}
+			results <- err
+		}(file)
+	}
+	// Wait for all goroutines to finish
+	wg.Wait()
+	close(results)
+	// Check if any errors occurred
+	for err := range results {
+		if err != nil {
+			klog.ErrorS(err, "error processing files")
+			return nil, err
+		}
+	}
+
+	files, err := os.ReadDir(path)
+	if err != nil {
+		klog.ErrorS(err, "failed to read directory", "path", path)
+	}
+
+	klog.Infof("", "pod", podName)
+	klog.Infof("", "containersList", containersList)
+
+	// Create the Pod
+	pod := &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      podName,
+			Namespace: "default",
+		},
+		Spec: corev1.PodSpec{
+			Containers:            containersList,
+			ShareProcessNamespace: &[]bool{true}[0],
+		},
+	}
+
+	if err := r.Create(ctx, pod); err != nil {
+		klog.ErrorS(err, "failed to create restored pod", "podName", podName)
+	} else {
+		klog.InfoS("restored pod", "podName", podName)
+	}
+
+	return pod, nil
+}
+
+func getFiles(path string) []os.DirEntry {
+	files, err := os.ReadDir(path)
+	if err != nil {
+		klog.ErrorS(err, "failed to read directory", "path", path)
+	}
+	return files
+}
+
+func processFile(file os.DirEntry, path string) ([]corev1.Container, string, error) {
+	// Check if file is a dummy file
+	if file.Name() == "dummy" {
+		klog.Infof("dummy file read")
+		return nil, "dummy", nil
+	}
+
+	// Get the path to the checkpoint file
+	checkpointPath := filepath.Join(path, file.Name())
+	klog.Infof("checkpointPath: %s", checkpointPath)
+
+	// Change file permissions
+	if err := os.Chmod(checkpointPath, 0777); err != nil {
+		klog.ErrorS(err, "failed to change permissions of checkpoint file", "checkpointPath", checkpointPath)
+		return nil, "", err
+	}
+
+	// Create a new container
+	newContainerCmd := exec.Command("sudo", "buildah", "from", "scratch")
+	newContainerOutput, err := newContainerCmd.Output()
+	if err != nil {
+		klog.ErrorS(err, "failed to create new container", "containerID", newContainerOutput)
+		return nil, "", err
+	}
+	newContainerOutput = bytes.TrimRight(newContainerOutput, "\n") // remove trailing newline
+	newContainer := string(newContainerOutput)
+
+	klog.Infof("", "new container name", newContainer)
+
+	// Add the checkpoint file to the new container
+	addCheckpointCmd := exec.Command("sudo", "buildah", "add", newContainer, checkpointPath, "/")
+	klog.Infof(addCheckpointCmd.String())
+
+	out, err := addCheckpointCmd.CombinedOutput()
+	if err != nil {
+		klog.ErrorS(err, "failed to add checkpoint to container")
+		return nil, "", err
+	} else {
+		klog.Infof("Checkpoint added to container", string(out))
+	}
+
+	// Extract the container name from the checkpoint file name
+	parts := strings.Split(checkpointPath, "-")
+	var containerName string
+
+	for i := len(parts) - 1; i >= 0; i-- {
+		part := parts[i]
+
+		// check if the part is a valid date/time
+		if part == "2023" {
+			// the previous part is the container name
+			if i > 0 {
+				containerName = parts[i-1]
+			} else {
+				break
+			}
+		}
+	}
+
+	// Use regular expression to extract string between "checkpoint-" and the next "_" character
+	re := regexp.MustCompile(`checkpoint-(.+?)_`)
+	match := re.FindStringSubmatch(checkpointPath)
+	if len(match) > 1 {
+		klog.Infof("pod name:", match[1])
+	} else {
+		klog.ErrorS(err, "failed to extract pod name from checkpoint file name", "checkpointPath", checkpointPath)
+	}
+
+	podName := match[1]
+
+	// Add an annotation to the container with the checkpoint name
+	annotation := "--annotation=io.kubernetes.cri-o.annotations.checkpoint.name=" + containerName
+	klog.Infof("", "annotation", annotation)
+
+	configCheckpointCmd := exec.Command("sudo", "buildah", "config", annotation, newContainer)
+	out, err = configCheckpointCmd.CombinedOutput()
+	if err != nil {
+		klog.ErrorS(err, "failed to add checkpoint to container")
+		return nil, "", err
+	} else {
+		klog.Infof("Checkpoint added to container", string(out))
+	}
+
+	// Commit the container with the checkpoint as a new image
+	localCheckpointPath := "leonardopoggiani/checkpoint-images:" + containerName
+	klog.Infof("", "localCheckpointPath", localCheckpointPath)
+	commitCheckpointCmd := exec.Command("sudo", "buildah", "commit", newContainer, localCheckpointPath)
+	out, err = commitCheckpointCmd.CombinedOutput()
+	if err != nil {
+		klog.ErrorS(err, "failed to commit checkpoint")
+		return nil, "", err
+	} else {
+		klog.Infof("Checkpoint committed", string(out))
+	}
+
+	addContainer := corev1.Container{
+		Name:  containerName,
+		Image: "localhost/leonardopoggiani/checkpoint-images:" + containerName,
+	}
+
+	var containersList []corev1.Container
+	containersList = append(containersList, addContainer)
+
+	removeContainerCmd := exec.Command("sudo", "buildah", "rm", newContainer)
+	out, err = removeContainerCmd.CombinedOutput()
+	if err != nil {
+		klog.ErrorS(err, "failed to remove container")
+		klog.Infof("out: %s", out)
+	}
+
+	return containersList, podName, nil
 }
 
 func (r *LiveMigrationReconciler) pushDockerImage(localCheckpointPath string, containerName string, podName string) {
