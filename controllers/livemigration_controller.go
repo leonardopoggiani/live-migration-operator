@@ -151,7 +151,7 @@ func (r *LiveMigrationReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 				if event.Op&fsnotify.Create == fsnotify.Create {
 					klog.Infof("Event: %s", event.String())
 
-					if strings.Contains(event.Name, "/checkpoints/") {
+					if strings.Contains(event.Name, "/checkpoints/") && strings.Contains(event.Name, "dummy") {
 						klog.Infof("file created", "file", event.Name)
 
 						restoredPod, err := r.buildahRestore(ctx, "/checkpoints/")
@@ -193,7 +193,6 @@ func (r *LiveMigrationReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 				}
 				if sourcePod != nil {
 					klog.Infof("sourcePod found", "pod", sourcePod.Name)
-					// _, err = r.migratePod(ctx, clientset, &migratingPod)
 					_, err = r.migratePod(ctx, clientset, &migratingPod)
 					if err != nil {
 						klog.ErrorS(err, "failed to migrate pod", "pod", sourcePod.Name)
@@ -542,6 +541,24 @@ func (r *LiveMigrationReconciler) migrateCheckpoint(ctx context.Context, files [
 		}
 	}
 
+	// send a dummy file at the end to signal the end of the migration
+	createDummyFile := exec.Command("touch", "/tmp/checkpoints/checkpoints/dummy")
+	createDummyFileOutput, err := createDummyFile.Output()
+	if err != nil {
+		klog.ErrorS(err, "failed to create dummy file", "output", createDummyFileOutput)
+	}
+
+	dummyPath := "/tmp/checkpoints/checkpoints/dummy"
+
+	postCmd := exec.Command("curl", "-X", "POST", "-F", fmt.Sprintf("file=@%s", dummyPath), fmt.Sprintf("http://%s:%d/upload", dummyIp, dummyPort))
+	klog.Infof("post command", "cmd", postCmd.String())
+	postOut, err := postCmd.CombinedOutput()
+	if err != nil {
+		klog.ErrorS(err, "failed to post on the service", "service", "dummy-service")
+	} else {
+		klog.Infof("post on the service", "service", "dummy-service", "out", string(postOut))
+	}
+
 	return nil
 }
 
@@ -596,11 +613,6 @@ func (r *LiveMigrationReconciler) migratePod(ctx context.Context, clientset *kub
 	} else {
 		klog.Infof("pod restored")
 	}
-
-	return ctrl.Result{}, nil
-}
-
-func (r *LiveMigrationReconciler) migratePodDirectly(ctx context.Context, clientset *kubernetes.Clientset, migratingPod *api.LiveMigration) (ctrl.Result, error) {
 
 	return ctrl.Result{}, nil
 }
@@ -728,7 +740,14 @@ func (r *LiveMigrationReconciler) buildahRestore(ctx context.Context, path strin
 	}
 
 	for _, file := range files {
-		klog.Infof("file found: %s", file.Name())
+
+		if file.Name() == "dummy" {
+			klog.Infof("dummy file read")
+			break
+		} else {
+			klog.Infof("file found: %s, but that's not the last one", file.Name())
+		}
+
 		checkpointPath := filepath.Join(path, file.Name())
 		klog.Infof("checkpointPath: %s", checkpointPath)
 
