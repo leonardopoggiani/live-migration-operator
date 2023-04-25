@@ -1010,6 +1010,33 @@ func processFile(file os.DirEntry, path string) ([]corev1.Container, string, err
 	checkpointPath := filepath.Join(path, file.Name())
 	klog.Infof("checkpointPath: %s", checkpointPath)
 
+	// Extract the container name from the checkpoint file name
+	parts := strings.Split(checkpointPath, "-")
+	var containerName string
+
+	for i := len(parts) - 1; i >= 0; i-- {
+		part := parts[i]
+
+		// check if the part is a valid date/time
+		if part == "2023" {
+			// the previous part is the container name
+			if i > 0 {
+				containerName = parts[i-1]
+			} else {
+				break
+			}
+		}
+	}
+
+	// Use regular expression to extract string between "checkpoint-" and the next "_" character
+	re := regexp.MustCompile(`checkpoint-(.+?)_`)
+	match := re.FindStringSubmatch(checkpointPath)
+	if len(match) > 1 {
+		klog.Infof("pod name:", match[1])
+	}
+
+	podName := match[1]
+
 	/*
 		// Change file permissions
 		if err := os.Chmod(checkpointPath, 0777); err != nil {
@@ -1053,17 +1080,20 @@ func processFile(file os.DirEntry, path string) ([]corev1.Container, string, err
 		results <- "File permissions changed"
 	}()
 
-	// Create a new container
-	newContainerCmd := exec.Command("sudo", "buildah", "from", "scratch")
-	newContainerOutput, err := newContainerCmd.Output()
-	if err != nil {
-		klog.ErrorS(err, "failed to create new container", "containerID", newContainerOutput)
-		return nil, "", err
-	}
-	newContainerOutput = bytes.TrimRight(newContainerOutput, "\n") // remove trailing newline
-	newContainer := string(newContainerOutput)
+	var newContainer string
 
 	go func() {
+
+		// Create a new container
+		newContainerCmd := exec.Command("sudo", "buildah", "from", "scratch")
+		newContainerOutput, err := newContainerCmd.Output()
+		if err != nil {
+			klog.ErrorS(err, "failed to create new container", "containerID", newContainerOutput)
+			results <- "failed to create new container"
+			return
+		}
+		newContainerOutput = bytes.TrimRight(newContainerOutput, "\n") // remove trailing newline
+		newContainer = string(newContainerOutput)
 
 		klog.Infof("", "new container name", newContainer)
 
@@ -1074,60 +1104,42 @@ func processFile(file os.DirEntry, path string) ([]corev1.Container, string, err
 			results <- "failed to add file to container"
 			return
 		}
+		// Add an annotation to the container with the checkpoint name
+		annotation := "--annotation=io.kubernetes.cri-o.annotations.checkpoint.name=" + containerName
+		klog.Infof("", "annotation", annotation)
+
+		configCheckpointCmd := exec.Command("sudo", "buildah", "config", annotation, newContainer)
+		out, err = configCheckpointCmd.CombinedOutput()
+		if err != nil {
+			klog.ErrorS(err, "failed to add checkpoint to container")
+			results <- "failed to add checkpoint to container"
+			return
+		} else {
+			klog.Infof("Checkpoint added to container", string(out))
+		}
+
+		// Commit the container with the checkpoint as a new image
+		localCheckpointPath := "leonardopoggiani/checkpoint-images:" + containerName
+		klog.Infof("", "localCheckpointPath", localCheckpointPath)
+		commitCheckpointCmd := exec.Command("sudo", "buildah", "commit", newContainer, localCheckpointPath)
+		out, err = commitCheckpointCmd.CombinedOutput()
+		if err != nil {
+			klog.ErrorS(err, "failed to commit checkpoint")
+			results <- "failed to commit checkpoint"
+			return
+		} else {
+			klog.Infof("Checkpoint committed", string(out))
+		}
+
+		removeContainerCmd := exec.Command("sudo", "buildah", "rm", newContainer)
+		out, err = removeContainerCmd.CombinedOutput()
+		if err != nil {
+			klog.ErrorS(err, "failed to remove container")
+			klog.Infof("out: %s", out)
+		}
+
 		results <- "File added to container: " + string(out)
 	}()
-
-	// Extract the container name from the checkpoint file name
-	parts := strings.Split(checkpointPath, "-")
-	var containerName string
-
-	for i := len(parts) - 1; i >= 0; i-- {
-		part := parts[i]
-
-		// check if the part is a valid date/time
-		if part == "2023" {
-			// the previous part is the container name
-			if i > 0 {
-				containerName = parts[i-1]
-			} else {
-				break
-			}
-		}
-	}
-
-	// Use regular expression to extract string between "checkpoint-" and the next "_" character
-	re := regexp.MustCompile(`checkpoint-(.+?)_`)
-	match := re.FindStringSubmatch(checkpointPath)
-	if len(match) > 1 {
-		klog.Infof("pod name:", match[1])
-	}
-
-	podName := match[1]
-
-	// Add an annotation to the container with the checkpoint name
-	annotation := "--annotation=io.kubernetes.cri-o.annotations.checkpoint.name=" + containerName
-	klog.Infof("", "annotation", annotation)
-
-	configCheckpointCmd := exec.Command("sudo", "buildah", "config", annotation, newContainer)
-	out, err := configCheckpointCmd.CombinedOutput()
-	if err != nil {
-		klog.ErrorS(err, "failed to add checkpoint to container")
-		return nil, "", err
-	} else {
-		klog.Infof("Checkpoint added to container", string(out))
-	}
-
-	// Commit the container with the checkpoint as a new image
-	localCheckpointPath := "leonardopoggiani/checkpoint-images:" + containerName
-	klog.Infof("", "localCheckpointPath", localCheckpointPath)
-	commitCheckpointCmd := exec.Command("sudo", "buildah", "commit", newContainer, localCheckpointPath)
-	out, err = commitCheckpointCmd.CombinedOutput()
-	if err != nil {
-		klog.ErrorS(err, "failed to commit checkpoint")
-		return nil, "", err
-	} else {
-		klog.Infof("Checkpoint committed", string(out))
-	}
 
 	addContainer := corev1.Container{
 		Name:  containerName,
@@ -1136,13 +1148,6 @@ func processFile(file os.DirEntry, path string) ([]corev1.Container, string, err
 
 	var containersList []corev1.Container
 	containersList = append(containersList, addContainer)
-
-	removeContainerCmd := exec.Command("sudo", "buildah", "rm", newContainer)
-	out, err = removeContainerCmd.CombinedOutput()
-	if err != nil {
-		klog.ErrorS(err, "failed to remove container")
-		klog.Infof("out: %s", out)
-	}
 
 	return containersList, podName, nil
 }
