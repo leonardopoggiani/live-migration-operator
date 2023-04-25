@@ -450,12 +450,13 @@ func (r *LiveMigrationReconciler) terminateCheckpointedPod(ctx context.Context, 
 		klog.Info("pod deleted ", podName)
 	}
 
-	err = waitForPodDeletion(ctx, podName, "default", clientset)
+	/*err = waitForPodDeletion(ctx, podName, "default", clientset)
 	if err != nil {
 		klog.ErrorS(err, "unable to finish delete pod", "pod", pod.Name)
 	} else {
 		klog.Info("pod deletetion completed ", podName)
 	}
+	*/
 
 	klog.Infof("Pod terminated ", podName)
 	return nil
@@ -582,27 +583,27 @@ func (r *LiveMigrationReconciler) migrateCheckpoint(ctx context.Context, files [
 			} else {
 				klog.Infof("post on the service", "service", "dummy-service", "out", string(postOut))
 			}
+
+			// send a dummy file at the end to signal the end of the migration
+			createDummyFile := exec.Command("touch", "/tmp/checkpoints/checkpoints/dummy")
+			createDummyFileOutput, err := createDummyFile.Output()
+			if err != nil {
+				klog.ErrorS(err, "failed to create dummy file", "output", createDummyFileOutput)
+			}
+
+			dummyPath := "/tmp/checkpoints/checkpoints/dummy"
+
+			postCmd = exec.Command("curl", "-X", "POST", "-F", fmt.Sprintf("file=@%s", dummyPath), fmt.Sprintf("http://%s:%d/upload", dummyIp, dummyPort))
+			klog.Infof("post command", "cmd", postCmd.String())
+			postOut, err = postCmd.CombinedOutput()
+			if err != nil {
+				klog.ErrorS(err, "failed to post on the service", "service", "dummy-service")
+			} else {
+				klog.Infof("post on the service", "service", "dummy-service", "out", string(postOut))
+			}
 		}(entry)
 	}
 	wg.Wait()
-
-	// send a dummy file at the end to signal the end of the migration
-	createDummyFile := exec.Command("touch", "/tmp/checkpoints/checkpoints/dummy")
-	createDummyFileOutput, err := createDummyFile.Output()
-	if err != nil {
-		klog.ErrorS(err, "failed to create dummy file", "output", createDummyFileOutput)
-	}
-
-	dummyPath := "/tmp/checkpoints/checkpoints/dummy"
-
-	postCmd := exec.Command("curl", "-X", "POST", "-F", fmt.Sprintf("file=@%s", dummyPath), fmt.Sprintf("http://%s:%d/upload", dummyIp, dummyPort))
-	klog.Infof("post command", "cmd", postCmd.String())
-	postOut, err := postCmd.CombinedOutput()
-	if err != nil {
-		klog.ErrorS(err, "failed to post on the service", "service", "dummy-service")
-	} else {
-		klog.Infof("post on the service", "service", "dummy-service", "out", string(postOut))
-	}
 
 	return nil
 }
