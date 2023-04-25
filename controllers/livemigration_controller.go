@@ -494,6 +494,34 @@ func waitForPodDeletion(ctx context.Context, podName string, namespace string, c
 	return fmt.Errorf("pod %s not found or already deleted", podName)
 }
 
+/*
+	for _, file := range files {
+		checkpointPath := filepath.Join(dir, file.Name())
+		klog.Infof("checkpointPath: %s", checkpointPath)
+
+		// change permissions of checkpoint file
+		// sudo chmod +r /tmp/checkpoints/checkpoints/checkpoint-tomcat-pod_liqo-demo-tomcat-2023-04-18T09:39:13Z.tar
+		chmodCmd := exec.Command("sudo", "chmod", "+rwx", checkpointPath)
+		chmodOutput, err := chmodCmd.Output()
+		if err != nil {
+			klog.ErrorS(err, "failed to change permissions of checkpoint file", "checkpointPath", checkpointPath)
+		} else {
+			klog.Infof("checkpoint file permissions changed: %s", chmodOutput)
+		}
+
+		postCmd := exec.Command("curl", "-X", "POST", "-F", fmt.Sprintf("file=@%s", checkpointPath), fmt.Sprintf("http://%s:%d/upload", dummyIp, dummyPort))
+		klog.Infof("post command", "cmd", postCmd.String())
+		postOut, err := postCmd.CombinedOutput()
+		if err != nil {
+			klog.ErrorS(err, "failed to post on the service", "service", "dummy-service")
+		} else {
+			klog.Infof("post on the service", "service", "dummy-service", "out", string(postOut))
+		}
+	}
+
+
+*/
+
 func (r *LiveMigrationReconciler) migrateCheckpoint(ctx context.Context, files []os.DirEntry, dir string) error {
 
 	kubeconfigPath := os.Getenv("KUBECONFIG")
@@ -516,36 +544,12 @@ func (r *LiveMigrationReconciler) migrateCheckpoint(ctx context.Context, files [
 	if err != nil {
 		klog.ErrorS(err, "failed to create Kubernetes client")
 	}
+	var mutex sync.Mutex // create a mutex to protect shared resources
 
+	// inside the worker function for uploading files
+	mutex.Lock()
 	dummyIp, dummyPort := r.getDummyServiceIPAndPort(clientset, ctx)
-
-	/*
-		for _, file := range files {
-			checkpointPath := filepath.Join(dir, file.Name())
-			klog.Infof("checkpointPath: %s", checkpointPath)
-
-			// change permissions of checkpoint file
-			// sudo chmod +r /tmp/checkpoints/checkpoints/checkpoint-tomcat-pod_liqo-demo-tomcat-2023-04-18T09:39:13Z.tar
-			chmodCmd := exec.Command("sudo", "chmod", "+rwx", checkpointPath)
-			chmodOutput, err := chmodCmd.Output()
-			if err != nil {
-				klog.ErrorS(err, "failed to change permissions of checkpoint file", "checkpointPath", checkpointPath)
-			} else {
-				klog.Infof("checkpoint file permissions changed: %s", chmodOutput)
-			}
-
-			postCmd := exec.Command("curl", "-X", "POST", "-F", fmt.Sprintf("file=@%s", checkpointPath), fmt.Sprintf("http://%s:%d/upload", dummyIp, dummyPort))
-			klog.Infof("post command", "cmd", postCmd.String())
-			postOut, err := postCmd.CombinedOutput()
-			if err != nil {
-				klog.ErrorS(err, "failed to post on the service", "service", "dummy-service")
-			} else {
-				klog.Infof("post on the service", "service", "dummy-service", "out", string(postOut))
-			}
-		}
-
-
-	*/
+	mutex.Unlock()
 
 	var wg sync.WaitGroup
 	for _, entry := range files {
@@ -804,6 +808,7 @@ func (r *LiveMigrationReconciler) buildahRestore(ctx context.Context, path strin
 			klog.ErrorS(err, "failed to create new container", "containerID", podName)
 			return nil, err
 		}
+
 		newContainerOutput = bytes.TrimRight(newContainerOutput, "\n") // remove trailing newline
 		newContainer := string(newContainerOutput)
 
@@ -849,8 +854,6 @@ func (r *LiveMigrationReconciler) buildahRestore(ctx context.Context, path strin
 			fmt.Println("No match found")
 		}
 
-		podName = match[1]
-
 		annotation := "--annotation=io.kubernetes.cri-o.annotations.checkpoint.name=" + containerName
 		klog.Infof("", "annotation", annotation)
 
@@ -877,7 +880,11 @@ func (r *LiveMigrationReconciler) buildahRestore(ctx context.Context, path strin
 			Image: "localhost/leonardopoggiani/checkpoint-images:" + containerName,
 		}
 
+		var mutex sync.Mutex
+		mutex.Lock()
+		podName = match[1]
 		containersList = append(containersList, addContainer)
+		mutex.Unlock()
 
 		removeContainerCmd := exec.Command("sudo", "buildah", "rm", newContainer)
 		out, err = removeContainerCmd.CombinedOutput()
@@ -929,7 +936,10 @@ func (r *LiveMigrationReconciler) buildahRestoreParellelized(ctx context.Context
 
 			tmpList, podName, err = processFile(file, path)
 			if podName != "dummy" {
+				var mutex sync.Mutex
+				mutex.Lock()
 				containersList = append(containersList, tmpList...)
+				mutex.Unlock()
 			} else {
 				return
 			}
@@ -998,11 +1008,48 @@ func processFile(file os.DirEntry, path string) ([]corev1.Container, string, err
 	checkpointPath := filepath.Join(path, file.Name())
 	klog.Infof("checkpointPath: %s", checkpointPath)
 
-	// Change file permissions
-	if err := os.Chmod(checkpointPath, 0777); err != nil {
-		klog.ErrorS(err, "failed to change permissions of checkpoint file", "checkpointPath", checkpointPath)
-		return nil, "", err
-	}
+	/*
+		// Change file permissions
+		if err := os.Chmod(checkpointPath, 0777); err != nil {
+			klog.ErrorS(err, "failed to change permissions of checkpoint file", "checkpointPath", checkpointPath)
+			return nil, "", err
+		}
+
+		// Create a new container
+		newContainerCmd := exec.Command("sudo", "buildah", "from", "scratch")
+		newContainerOutput, err := newContainerCmd.Output()
+		if err != nil {
+			klog.ErrorS(err, "failed to create new container", "containerID", newContainerOutput)
+			return nil, "", err
+		}
+		newContainerOutput = bytes.TrimRight(newContainerOutput, "\n") // remove trailing newline
+		newContainer := string(newContainerOutput)
+
+		klog.Infof("", "new container name", newContainer)
+
+		// Add the checkpoint file to the new container
+		addCheckpointCmd := exec.Command("sudo", "buildah", "add", newContainer, checkpointPath, "/")
+		klog.Infof(addCheckpointCmd.String())
+
+		out, err := addCheckpointCmd.CombinedOutput()
+		if err != nil {
+			klog.ErrorS(err, "failed to add checkpoint to container")
+			return nil, "", err
+		} else {
+			klog.Infof("Checkpoint added to container", string(out))
+		}*/
+
+	results := make(chan string, 2)
+
+	go func() {
+		err := os.Chmod(checkpointPath, 0644)
+		if err != nil {
+			klog.ErrorS(err, "failed to change permissions of checkpoint file", "checkpointPath", checkpointPath)
+			results <- "failed to change permissions of checkpoint file"
+			return
+		}
+		results <- "File permissions changed"
+	}()
 
 	// Create a new container
 	newContainerCmd := exec.Command("sudo", "buildah", "from", "scratch")
@@ -1014,19 +1061,19 @@ func processFile(file os.DirEntry, path string) ([]corev1.Container, string, err
 	newContainerOutput = bytes.TrimRight(newContainerOutput, "\n") // remove trailing newline
 	newContainer := string(newContainerOutput)
 
-	klog.Infof("", "new container name", newContainer)
+	go func() {
 
-	// Add the checkpoint file to the new container
-	addCheckpointCmd := exec.Command("sudo", "buildah", "add", newContainer, checkpointPath, "/")
-	klog.Infof(addCheckpointCmd.String())
+		klog.Infof("", "new container name", newContainer)
 
-	out, err := addCheckpointCmd.CombinedOutput()
-	if err != nil {
-		klog.ErrorS(err, "failed to add checkpoint to container")
-		return nil, "", err
-	} else {
-		klog.Infof("Checkpoint added to container", string(out))
-	}
+		addCheckpointCmd := exec.Command("sudo", "buildah", "add", newContainer, checkpointPath, "/")
+		out, err := addCheckpointCmd.CombinedOutput()
+		if err != nil {
+			klog.ErrorS(err, "failed to add file to container")
+			results <- "failed to add file to container"
+			return
+		}
+		results <- "File added to container: " + string(out)
+	}()
 
 	// Extract the container name from the checkpoint file name
 	parts := strings.Split(checkpointPath, "-")
@@ -1051,8 +1098,6 @@ func processFile(file os.DirEntry, path string) ([]corev1.Container, string, err
 	match := re.FindStringSubmatch(checkpointPath)
 	if len(match) > 1 {
 		klog.Infof("pod name:", match[1])
-	} else {
-		klog.ErrorS(err, "failed to extract pod name from checkpoint file name", "checkpointPath", checkpointPath)
 	}
 
 	podName := match[1]
@@ -1062,7 +1107,7 @@ func processFile(file os.DirEntry, path string) ([]corev1.Container, string, err
 	klog.Infof("", "annotation", annotation)
 
 	configCheckpointCmd := exec.Command("sudo", "buildah", "config", annotation, newContainer)
-	out, err = configCheckpointCmd.CombinedOutput()
+	out, err := configCheckpointCmd.CombinedOutput()
 	if err != nil {
 		klog.ErrorS(err, "failed to add checkpoint to container")
 		return nil, "", err
