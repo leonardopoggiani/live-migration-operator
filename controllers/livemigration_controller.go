@@ -19,7 +19,6 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/watch"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/clientcmd"
 	"k8s.io/klog/v2"
@@ -431,7 +430,7 @@ func (r *LiveMigrationReconciler) waitForContainerReady(podName string, namespac
 	}
 }
 
-func (r *LiveMigrationReconciler) terminateCheckpointedPod(ctx context.Context, podName string, clientset *kubernetes.Clientset) error {
+func (r *LiveMigrationReconciler) terminateCheckpointedPod(podName string, clientset *kubernetes.Clientset) error {
 	// get the pod by name
 	klog.Infof("", "Terminating pod ", podName)
 
@@ -462,6 +461,7 @@ func (r *LiveMigrationReconciler) terminateCheckpointedPod(ctx context.Context, 
 	return nil
 }
 
+/*
 func waitForPodDeletion(ctx context.Context, podName string, namespace string, clientset *kubernetes.Clientset) error {
 
 	fieldSelector := fmt.Sprintf("metadata.name=%s", podName)
@@ -494,7 +494,7 @@ func waitForPodDeletion(ctx context.Context, podName string, namespace string, c
 
 	return fmt.Errorf("pod %s not found or already deleted", podName)
 }
-
+*/
 /*
 	for _, file := range files {
 		checkpointPath := filepath.Join(dir, file.Name())
@@ -585,7 +585,7 @@ func (r *LiveMigrationReconciler) migrateCheckpoint(ctx context.Context, files [
 			}
 
 			// send a dummy file at the end to signal the end of the migration
-			createDummyFile := exec.Command("touch", "/tmp/checkpoints/checkpoints/dummy")
+			createDummyFile := exec.Command("sudo", "touch", "/tmp/checkpoints/checkpoints/dummy")
 			createDummyFileOutput, err := createDummyFile.Output()
 			if err != nil {
 				klog.ErrorS(err, "failed to create dummy file", "output", createDummyFileOutput)
@@ -641,7 +641,7 @@ func (r *LiveMigrationReconciler) migratePod(ctx context.Context, clientset *kub
 
 	klog.Infof("", "Live-migration", "Step 2 - checkpoint source Pod - completed")
 
-	err = r.terminateCheckpointedPod(ctx, migratingPod.Name, clientset)
+	err = r.terminateCheckpointedPod(migratingPod.Name, clientset)
 	if err != nil {
 		klog.ErrorS(err, "unable to terminate checkpointed pod", "pod", migratingPod.Name)
 	} else {
