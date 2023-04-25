@@ -567,11 +567,11 @@ func (r *LiveMigrationReconciler) migrateCheckpoint(ctx context.Context, files [
 			// change permissions of checkpoint file
 			// sudo chmod +r /tmp/checkpoints/checkpoints/checkpoint-tomcat-pod_liqo-demo-tomcat-2023-04-18T09:39:13Z.tar
 			chmodCmd := exec.Command("sudo", "chmod", "+rwx", checkpointPath)
-			chmodOutput, err := chmodCmd.Output()
+			_, err = chmodCmd.Output()
 			if err != nil {
 				klog.ErrorS(err, "failed to change permissions of checkpoint file", "checkpointPath", checkpointPath)
 			} else {
-				klog.Infof("checkpoint file permissions changed: %s", chmodOutput)
+				klog.Infof("checkpoint file permissions changed: %s", checkpointPath)
 			}
 
 			postCmd := exec.Command("curl", "-X", "POST", "-F", fmt.Sprintf("file=@%s", checkpointPath), fmt.Sprintf("http://%s:%d/upload", dummyIp, dummyPort))
@@ -652,11 +652,13 @@ func (r *LiveMigrationReconciler) migratePod(ctx context.Context, clientset *kub
 		klog.ErrorS(err, "unable to read dir", "dir", pathToClear)
 	}
 
+	klog.Infof("pathToClear", "pathToClear", pathToClear)
+
 	err = r.migrateCheckpoint(ctx, files, pathToClear)
 	if err != nil {
-		klog.ErrorS(err, "unable to restore", "pod", migratingPod.Name, "destinationHost", migratingPod.Spec.DestHost)
+		klog.ErrorS(err, "migration failed")
 	} else {
-		klog.Infof("pod restored")
+		klog.Infof("migration completed")
 	}
 
 	return ctrl.Result{}, nil
