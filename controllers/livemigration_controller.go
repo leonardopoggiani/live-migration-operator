@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"github.com/fsnotify/fsnotify"
 	"k8s.io/apimachinery/pkg/util/intstr"
+	"k8s.io/apimachinery/pkg/watch"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -79,7 +80,6 @@ func (r *LiveMigrationReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 	} else {
 		template, err = r.getSourcePodTemplate(clientset, migratingPod.Spec.SourcePod)
 		if err != nil || template == nil {
-			klog.ErrorS(err, "sourcePod not exist", "pod", migratingPod.Spec.SourcePod)
 			err = r.createDummyPod(clientset, ctx)
 			if err != nil {
 				klog.ErrorS(err, "failed to create dummy pod")
@@ -121,8 +121,6 @@ func (r *LiveMigrationReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 		}
 	}
 
-	klog.Infof("", "Migrate or restore a running pod")
-
 	// Use a channel to signal when a migration has been triggered
 	migrationDone := make(chan struct{})
 
@@ -152,7 +150,6 @@ func (r *LiveMigrationReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 					klog.Infof("Event: %s", event.String())
 
 					if strings.Contains(event.Name, "/checkpoints/") && strings.Contains(event.Name, "dummy") {
-						klog.Infof("file created", "file", event.Name)
 
 						// restoredPod, err := r.buildahRestore(ctx, "/checkpoints/")
 						restoredPod, err := r.buildahRestoreParellelized(ctx, "/checkpoints/")
@@ -193,14 +190,13 @@ func (r *LiveMigrationReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 					return
 				}
 				if sourcePod != nil {
-					klog.Infof("sourcePod found", "pod", sourcePod.Name)
-					_, err = r.migratePod(ctx, clientset, &migratingPod)
+					_, err := r.migratePodPipelined(ctx, clientset, &migratingPod)
+					// _, err = r.migratePod(ctx, clientset, &migratingPod)
 					if err != nil {
 						klog.ErrorS(err, "failed to migrate pod", "pod", sourcePod.Name)
 						return
 					}
 					migrationDone <- struct{}{}
-					klog.Infof("migration done")
 					return
 				} else {
 					klog.Infof("sourcePod not found yet, wait and retry..")
@@ -275,7 +271,6 @@ func (r *LiveMigrationReconciler) deletePod(ctx context.Context, pod *corev1.Pod
 }
 
 func (r *LiveMigrationReconciler) checkPodExist(clientset *kubernetes.Clientset, name string) (*corev1.Pod, error) {
-	klog.Infof("checkPodExist", "pod", name)
 
 	existingPod, err := clientset.CoreV1().Pods("default").Get(context.Background(), name, metav1.GetOptions{})
 	if err != nil {
@@ -449,19 +444,19 @@ func (r *LiveMigrationReconciler) terminateCheckpointedPod(podName string, clien
 		klog.Info("pod deleted ", podName)
 	}
 
-	/*err = waitForPodDeletion(ctx, podName, "default", clientset)
-	if err != nil {
-		klog.ErrorS(err, "unable to finish delete pod", "pod", pod.Name)
-	} else {
-		klog.Info("pod deletetion completed ", podName)
-	}
+	/*
+		err = waitForPodDeletion(ctx, podName, "default", clientset)
+		if err != nil {
+			klog.ErrorS(err, "unable to finish delete pod", "pod", pod.Name)
+		} else {
+			klog.Info("pod deletetion completed ", podName)
+		}
 	*/
 
 	klog.Infof("Pod terminated ", podName)
 	return nil
 }
 
-/*
 func waitForPodDeletion(ctx context.Context, podName string, namespace string, clientset *kubernetes.Clientset) error {
 
 	fieldSelector := fmt.Sprintf("metadata.name=%s", podName)
@@ -494,9 +489,12 @@ func waitForPodDeletion(ctx context.Context, podName string, namespace string, c
 
 	return fmt.Errorf("pod %s not found or already deleted", podName)
 }
-*/
-/*
+
+func (r *LiveMigrationReconciler) migrateCheckpoint(ctx context.Context, files []os.DirEntry, dir string, clientset *kubernetes.Clientset) error {
+
+	dummyIp, dummyPort := r.getDummyServiceIPAndPort(clientset, ctx)
 	for _, file := range files {
+
 		checkpointPath := filepath.Join(dir, file.Name())
 		klog.Infof("checkpointPath: %s", checkpointPath)
 
@@ -520,10 +518,10 @@ func waitForPodDeletion(ctx context.Context, podName string, namespace string, c
 		}
 	}
 
+	return nil
+}
 
-*/
-
-func (r *LiveMigrationReconciler) migrateCheckpoint(ctx context.Context, files []os.DirEntry, dir string) error {
+func (r *LiveMigrationReconciler) migrateCheckpointParallelized(ctx context.Context, files []os.DirEntry, dir string) error {
 
 	kubeconfigPath := os.Getenv("KUBECONFIG")
 	if kubeconfigPath == "" {
@@ -545,12 +543,9 @@ func (r *LiveMigrationReconciler) migrateCheckpoint(ctx context.Context, files [
 	if err != nil {
 		klog.ErrorS(err, "failed to create Kubernetes client")
 	}
-	var mutex sync.Mutex // create a mutex to protect shared resources
 
 	// inside the worker function for uploading files
-	mutex.Lock()
 	dummyIp, dummyPort := r.getDummyServiceIPAndPort(clientset, ctx)
-	mutex.Unlock()
 
 	var wg sync.WaitGroup
 	for _, entry := range files {
@@ -609,8 +604,6 @@ func (r *LiveMigrationReconciler) migrateCheckpoint(ctx context.Context, files [
 }
 
 func (r *LiveMigrationReconciler) migratePod(ctx context.Context, clientset *kubernetes.Clientset, migratingPod *api.LiveMigration) (ctrl.Result, error) {
-	klog.Infof("", "Live-migration", "Step 1 - Check source pod is exist or not - completed")
-
 	containers, err := PrintContainerIDs(clientset, "default")
 	if err != nil {
 		klog.ErrorS(err, "unable to get container IDs")
@@ -620,8 +613,6 @@ func (r *LiveMigrationReconciler) migratePod(ctx context.Context, clientset *kub
 	pathToClear := "/tmp/checkpoints/checkpoints"
 	if err := os.RemoveAll(pathToClear); err != nil {
 		klog.ErrorS(err, "failed to delete existing checkpoints folder")
-	} else {
-		klog.InfoS("existing checkpoints folder deleted")
 	}
 
 	// Create new checkpoints folder
@@ -639,13 +630,9 @@ func (r *LiveMigrationReconciler) migratePod(ctx context.Context, clientset *kub
 		klog.ErrorS(err, "failed to change owner of checkpoints folder")
 	}
 
-	klog.Infof("", "Live-migration", "Step 2 - checkpoint source Pod - completed")
-
 	err = r.terminateCheckpointedPod(migratingPod.Name, clientset)
 	if err != nil {
 		klog.ErrorS(err, "unable to terminate checkpointed pod", "pod", migratingPod.Name)
-	} else {
-		klog.Infof("checkpointed pod terminated")
 	}
 
 	files, err := os.ReadDir(pathToClear)
@@ -655,11 +642,83 @@ func (r *LiveMigrationReconciler) migratePod(ctx context.Context, clientset *kub
 
 	klog.Infof("pathToClear", "pathToClear", pathToClear)
 
-	err = r.migrateCheckpoint(ctx, files, pathToClear)
+	err = r.migrateCheckpointParallelized(ctx, files, pathToClear)
 	if err != nil {
 		klog.ErrorS(err, "migration failed")
-	} else {
-		klog.Infof("migration completed")
+	}
+
+	return ctrl.Result{}, nil
+}
+
+func (r *LiveMigrationReconciler) migratePodPipelined(ctx context.Context, clientset *kubernetes.Clientset, migratingPod *api.LiveMigration) (ctrl.Result, error) {
+	containers, err := PrintContainerIDs(clientset, "default")
+	if err != nil {
+		klog.ErrorS(err, "unable to get container IDs")
+	}
+
+	// Stage 1: Checkpoint pods
+	checkpoints := make(chan string)
+	go func() {
+		defer close(checkpoints)
+		pathToClear := "/tmp/checkpoints/checkpoints"
+		if err := os.RemoveAll(pathToClear); err != nil {
+			klog.ErrorS(err, "failed to delete existing checkpoints folder")
+			return
+		}
+		if err := os.MkdirAll(pathToClear, 0777); err != nil {
+			klog.ErrorS(err, "failed to create checkpoints folder")
+			return
+		}
+		if err := r.checkpointPodCrio(containers, "default", migratingPod.Name); err != nil {
+			klog.ErrorS(err, "unable to checkpoint pod", "pod", migratingPod.Name)
+			return
+		}
+		if err := os.Chown(pathToClear, os.Getuid(), os.Getgid()); err != nil {
+			klog.ErrorS(err, "failed to change owner of checkpoints folder")
+			return
+		}
+		checkpoints <- pathToClear
+
+	}()
+
+	// Stage 2: Terminate checkpointed pods
+	terminatedPods := make(chan string)
+	go func() {
+		defer close(terminatedPods)
+		for range containers {
+			if err := r.terminateCheckpointedPod(migratingPod.Name, clientset); err != nil {
+				klog.ErrorS(err, "unable to terminate checkpointed pod", "pod", migratingPod.Name)
+				continue
+			}
+			terminatedPods <- migratingPod.Name
+		}
+	}()
+
+	// Stage 3: Migrate checkpoints in parallel
+	migratedCheckpoints := make(chan string)
+	go func() {
+		defer close(migratedCheckpoints)
+		for pathToClear := range checkpoints {
+			files, err := os.ReadDir(pathToClear)
+			if err != nil {
+				klog.ErrorS(err, "unable to read dir", "dir", pathToClear)
+				continue
+			}
+			if err := r.migrateCheckpointParallelized(ctx, files, pathToClear); err != nil {
+				klog.ErrorS(err, "migration failed", "dir", pathToClear)
+				continue
+			}
+			migratedCheckpoints <- pathToClear
+		}
+	}()
+
+	// Stage 4: Clean up checkpoints folder
+	for range migratedCheckpoints {
+		pathToClear := "/tmp/checkpoints/checkpoints"
+		if err := os.RemoveAll(pathToClear); err != nil {
+			klog.ErrorS(err, "failed to delete checkpoints folder", "dir", pathToClear)
+			continue
+		}
 	}
 
 	return ctrl.Result{}, nil
