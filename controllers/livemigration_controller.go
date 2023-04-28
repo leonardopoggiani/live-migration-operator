@@ -688,6 +688,7 @@ func (r *LiveMigrationReconciler) migratePodPipelined(ctx context.Context, clien
 		wg.Add(1)
 		go func(path string) {
 			defer wg.Done()
+			defer close(migratedCheckpoints) // Close the channel when the function returns
 			files, err := os.ReadDir(path)
 			if err != nil {
 				klog.ErrorS(err, "unable to read dir", "dir", path)
