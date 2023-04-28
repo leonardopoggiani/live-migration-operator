@@ -1072,8 +1072,8 @@ func (r *LiveMigrationReconciler) buildahRestorePipelined(ctx context.Context, p
 					klog.ErrorS(err, "failed to process file", "file", file.Name())
 				} else {
 					resultChan <- containers
-					wg.Done()
 				}
+				wg.Done()
 			}
 		}()
 	}
