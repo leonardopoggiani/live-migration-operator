@@ -682,13 +682,12 @@ func (r *LiveMigrationReconciler) migratePodPipelined(ctx context.Context, clien
 	}()
 
 	// Stage 2: Migrate checkpoints in parallel
-	migratedCheckpoints := make(chan string)
+	migratedCheckpoints := make(chan string, len(checkpoints))
 	var wg sync.WaitGroup
 	for pathToClear := range checkpoints {
 		wg.Add(1)
 		go func(path string) {
 			defer wg.Done()
-			defer close(migratedCheckpoints) // Close the channel when the function returns
 			files, err := os.ReadDir(path)
 			if err != nil {
 				klog.ErrorS(err, "unable to read dir", "dir", path)
@@ -702,6 +701,7 @@ func (r *LiveMigrationReconciler) migratePodPipelined(ctx context.Context, clien
 		}(pathToClear)
 	}
 	wg.Wait()
+	close(migratedCheckpoints)
 
 	if err := r.terminateCheckpointedPod(migratingPod.Name, clientset); err != nil {
 		klog.ErrorS(err, "unable to terminate checkpointed pod", "pod", migratingPod.Name)
@@ -1063,6 +1063,7 @@ func (r *LiveMigrationReconciler) buildahRestorePipelined(ctx context.Context, p
 	resultChan := make(chan []corev1.Container)
 
 	// Fan-out the work across workers
+	var wg sync.WaitGroup
 	const numWorkers = 10
 	for i := 0; i < numWorkers; i++ {
 		go func() {
@@ -1072,12 +1073,14 @@ func (r *LiveMigrationReconciler) buildahRestorePipelined(ctx context.Context, p
 				} else {
 					resultChan <- containers
 				}
+				wg.Done()
 			}
 		}()
 	}
 
 	// Close the result channel when all workers are done
 	go func() {
+		wg.Wait()
 		close(resultChan)
 	}()
 
