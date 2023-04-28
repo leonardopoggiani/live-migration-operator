@@ -699,12 +699,12 @@ func (r *LiveMigrationReconciler) migratePodPipelined(ctx context.Context, clien
 		}
 	}()
 
-	time.Sleep(5)
-
-	if err := r.terminateCheckpointedPod(migratingPod.Name, clientset); err != nil {
-		klog.ErrorS(err, "unable to terminate checkpointed pod", "pod", migratingPod.Name)
-		return ctrl.Result{}, err
-	}
+	/*
+		if err := r.terminateCheckpointedPod(migratingPod.Name, clientset); err != nil {
+			klog.ErrorS(err, "unable to terminate checkpointed pod", "pod", migratingPod.Name)
+			return ctrl.Result{}, err
+		}
+	*/
 
 	// Stage 3: Clean up checkpoints folder
 	for range migratedCheckpoints {
