@@ -1079,9 +1079,10 @@ func (r *LiveMigrationReconciler) buildahRestorePipelined(ctx context.Context, p
 	}
 
 	// Close the result channel when all workers are done
-
-	wg.Wait()
-	close(resultChan)
+	go func() {
+		wg.Wait()
+		close(resultChan)
+	}()
 
 	// Fan-in the results from workers and build the container list
 	var containersList []corev1.Container
