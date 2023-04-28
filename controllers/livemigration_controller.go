@@ -1063,25 +1063,21 @@ func (r *LiveMigrationReconciler) buildahRestorePipelined(ctx context.Context, p
 	resultChan := make(chan []corev1.Container)
 
 	// Fan-out the work across workers
-	var wg sync.WaitGroup
 	const numWorkers = 10
 	for i := 0; i < numWorkers; i++ {
 		go func() {
 			for file := range fileChan {
-				wg.Add(1)
 				if containers, _, err := processFile(file, path); err != nil {
 					klog.ErrorS(err, "failed to process file", "file", file.Name())
 				} else {
 					resultChan <- containers
 				}
-				wg.Done()
 			}
 		}()
 	}
 
 	// Close the result channel when all workers are done
 	go func() {
-		wg.Wait()
 		close(resultChan)
 	}()
 
