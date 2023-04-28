@@ -1045,7 +1045,7 @@ func (r *LiveMigrationReconciler) buildahRestoreParallelized(ctx context.Context
 
 func (r *LiveMigrationReconciler) buildahRestorePipelined(ctx context.Context, path string) (*corev1.Pod, error) {
 	files := getFiles(path) // Get list of files to process
-	podName := retrievePodName(path)
+	podName := retrievePodName(files[0].Name())
 
 	// Channel to send files to workers
 	fileChan := make(chan os.DirEntry)
