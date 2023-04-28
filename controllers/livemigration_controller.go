@@ -150,7 +150,6 @@ func (r *LiveMigrationReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 					klog.Infof("Event: %s", event.String())
 
 					if strings.Contains(event.Name, "/checkpoints/") && strings.Contains(event.Name, "dummy") {
-
 						// restoredPod, err := r.buildahRestore(ctx, "/checkpoints/")
 						// restoredPod, err := r.buildahRestoreParallelized(ctx, "/checkpoints/")
 						restoredPod, err := r.buildahRestorePipelined(ctx, "/checkpoints/")
@@ -1023,9 +1022,6 @@ func (r *LiveMigrationReconciler) buildahRestoreParallelized(ctx context.Context
 		klog.ErrorS(err, "failed to read directory", "path", path)
 	}
 
-	klog.Infof("", "pod", podName)
-	klog.Infof("", "containersList", containersList)
-
 	// Create the Pod
 	pod := &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
@@ -1049,6 +1045,7 @@ func (r *LiveMigrationReconciler) buildahRestoreParallelized(ctx context.Context
 
 func (r *LiveMigrationReconciler) buildahRestorePipelined(ctx context.Context, path string) (*corev1.Pod, error) {
 	files := getFiles(path) // Get list of files to process
+	podName := retrievePodName(path)
 
 	// Channel to send files to workers
 	fileChan := make(chan os.DirEntry)
@@ -1097,7 +1094,7 @@ func (r *LiveMigrationReconciler) buildahRestorePipelined(ctx context.Context, p
 	// Create the Pod
 	pod := &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "restored-pod",
+			Name:      podName,
 			Namespace: "default",
 		},
 		Spec: corev1.PodSpec{
