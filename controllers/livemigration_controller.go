@@ -1067,13 +1067,13 @@ func (r *LiveMigrationReconciler) buildahRestorePipelined(ctx context.Context, p
 	const numWorkers = 10
 	for i := 0; i < numWorkers; i++ {
 		go func() {
+			defer wg.Done()
 			for file := range fileChan {
 				if containers, _, err := processFile(file, path); err != nil {
 					klog.ErrorS(err, "failed to process file", "file", file.Name())
 				} else {
 					resultChan <- containers
 				}
-				wg.Done()
 			}
 		}()
 	}
