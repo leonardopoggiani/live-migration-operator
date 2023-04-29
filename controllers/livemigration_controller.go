@@ -354,6 +354,27 @@ func (r *LiveMigrationReconciler) checkpointPodCrio(containers []Container, name
 	return nil
 }
 
+func (r *LiveMigrationReconciler) checkpointPodPipelined(containers []Container, namespace string, podName string) error {
+	var wg sync.WaitGroup
+	for _, container := range containers {
+		wg.Add(1)
+		go func(containerName string) {
+			defer wg.Done()
+			curlPath := "https://localhost:10250/checkpoint/" + namespace + "/" + podName + "/" + containerName
+			checkpointCmd := exec.Command("curl", "-sk", "-XPOST", curlPath)
+
+			output, err := checkpointCmd.CombinedOutput()
+			if err != nil {
+				klog.ErrorS(err, "failed to checkpoint container", "output", string(output))
+			} else {
+				klog.InfoS("checkpointed pod", "output", string(output))
+			}
+		}(container.Name)
+	}
+	wg.Wait()
+	return nil
+}
+
 type Container struct {
 	ID   string
 	Name string
@@ -418,7 +439,7 @@ func (r *LiveMigrationReconciler) waitForContainerReady(podName string, namespac
 	}
 }
 
-func (r *LiveMigrationReconciler) terminateCheckpointedPod(podName string, clientset *kubernetes.Clientset) error {
+func (r *LiveMigrationReconciler) terminateCheckpointedPod(ctx context.Context, podName string, clientset *kubernetes.Clientset) error {
 	// get the pod by name
 	klog.Infof("", "Terminating pod ", podName)
 
@@ -437,14 +458,12 @@ func (r *LiveMigrationReconciler) terminateCheckpointedPod(podName string, clien
 		klog.Info("pod deleted ", podName)
 	}
 
-	/*
-		err = waitForPodDeletion(ctx, podName, "default", clientset)
-		if err != nil {
-			klog.ErrorS(err, "unable to finish delete pod", "pod", pod.Name)
-		} else {
-			klog.Info("pod deletetion completed ", podName)
-		}
-	*/
+	err = waitForPodDeletion(ctx, podName, "default", clientset)
+	if err != nil {
+		klog.ErrorS(err, "unable to finish delete pod", "pod", pod.Name)
+	} else {
+		klog.Info("pod deletetion completed ", podName)
+	}
 
 	klog.Infof("Pod terminated ", podName)
 	return nil
@@ -623,7 +642,7 @@ func (r *LiveMigrationReconciler) migratePod(ctx context.Context, clientset *kub
 		klog.ErrorS(err, "failed to change owner of checkpoints folder")
 	}
 
-	err = r.terminateCheckpointedPod(migratingPod.Name, clientset)
+	err = r.terminateCheckpointedPod(ctx, migratingPod.Name, clientset)
 	if err != nil {
 		klog.ErrorS(err, "unable to terminate checkpointed pod", "pod", migratingPod.Name)
 	}
@@ -662,7 +681,7 @@ func (r *LiveMigrationReconciler) migratePodPipelined(ctx context.Context, clien
 			klog.ErrorS(err, "failed to create checkpoints folder")
 			return
 		}
-		if err := r.checkpointPodCrio(containers, "default", migratingPod.Name); err != nil {
+		if err := r.checkpointPodPipelined(containers, "default", migratingPod.Name); err != nil {
 			klog.ErrorS(err, "unable to checkpoint pod", "pod", migratingPod.Name)
 			return
 		}
@@ -696,9 +715,11 @@ func (r *LiveMigrationReconciler) migratePodPipelined(ctx context.Context, clien
 	wg.Wait()
 	close(migratedCheckpoints)
 
-	if err := r.terminateCheckpointedPod(migratingPod.Name, clientset); err != nil {
+	if err := r.terminateCheckpointedPod(ctx, migratingPod.Name, clientset); err != nil {
 		klog.ErrorS(err, "unable to terminate checkpointed pod", "pod", migratingPod.Name)
 		return ctrl.Result{}, err
+	} else {
+		klog.Infof("terminated pod", "pod", migratingPod.Name)
 	}
 
 	// Stage 3: Clean up checkpoints folder
@@ -707,6 +728,8 @@ func (r *LiveMigrationReconciler) migratePodPipelined(ctx context.Context, clien
 		if err := os.RemoveAll(pathToClear); err != nil {
 			klog.ErrorS(err, "failed to delete checkpoints folder", "dir", pathToClear)
 			continue
+		} else {
+			klog.Infof("deleted checkpoints folder", "dir", pathToClear)
 		}
 	}
 
