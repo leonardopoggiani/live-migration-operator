@@ -712,8 +712,11 @@ func (r *LiveMigrationReconciler) migratePodPipelined(ctx context.Context, clien
 			migratedCheckpoints <- path
 		}(pathToClear)
 	}
-	wg.Wait()
-	close(migratedCheckpoints)
+
+	go func() {
+		wg.Wait()
+		close(migratedCheckpoints)
+	}()
 
 	if err := r.terminateCheckpointedPod(ctx, migratingPod.Name, clientset); err != nil {
 		klog.ErrorS(err, "unable to terminate checkpointed pod", "pod", migratingPod.Name)
