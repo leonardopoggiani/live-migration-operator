@@ -11,6 +11,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"strings"
 	"sync"
 	"time"
@@ -19,7 +20,7 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime"
+	run "k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/clientcmd"
 	"k8s.io/klog/v2"
@@ -30,7 +31,7 @@ import (
 // LiveMigrationReconciler reconciles a LiveMigration object
 type LiveMigrationReconciler struct {
 	client.Client
-	Scheme *runtime.Scheme
+	Scheme *run.Scheme
 }
 
 //+kubebuilder:rbac:groups=livemigration.liqo.io,resources=livemigrations,verbs=get;list;watch;create;update;patch;delete
@@ -124,9 +125,6 @@ func (r *LiveMigrationReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 	// Use a channel to signal when a migration has been triggered
 	migrationDone := make(chan struct{})
 
-	// Use a channel to signal when the function should stop retrying
-	stop := make(chan struct{})
-
 	// Start a goroutine to watch for file events
 	watcher, err := fsnotify.NewWatcher()
 	if err != nil {
@@ -141,6 +139,10 @@ func (r *LiveMigrationReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 
 	// Use a channel to signal when the sourcePod has been detected
 	sourcePodDetected := make(chan *corev1.Pod)
+
+	// Use a context to cancel the loop that checks for sourcePod
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 
 	go func() {
 		for {
@@ -162,8 +164,8 @@ func (r *LiveMigrationReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 				}
 			case err := <-watcher.Errors:
 				klog.ErrorS(err, "failed to watch file")
-			case <-stop:
-				klog.Infof("stop watching for file")
+			case <-ctx.Done():
+				klog.Infof("stop checking for sourcePod")
 				return
 			}
 		}
@@ -180,7 +182,7 @@ func (r *LiveMigrationReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 	go func() {
 		for {
 			select {
-			case <-stop:
+			case <-ctx.Done():
 				klog.Infof("stop checking for sourcePod")
 				return
 			default:
@@ -196,7 +198,6 @@ func (r *LiveMigrationReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 						klog.ErrorS(err, "failed to migrate pod", "pod", sourcePod.Name)
 						return
 					}
-					migrationDone <- struct{}{}
 					return
 				} else {
 					klog.Infof("sourcePod not found yet, wait and retry..")
@@ -210,19 +211,11 @@ func (r *LiveMigrationReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 	select {
 	case <-sourcePodDetected:
 		// Stop watching for file events and checking for the sourcePod
-		err := watcher.Close()
-		if err != nil {
-			return ctrl.Result{}, err
-		}
-		close(stop)
+		cancel()
 		return ctrl.Result{}, nil
 	case <-migrationDone:
 		// Stop watching for file events and checking for the sourcePod
-		err := watcher.Close()
-		if err != nil {
-			return ctrl.Result{}, err
-		}
-		close(stop)
+		cancel()
 		return ctrl.Result{}, nil
 	}
 }
@@ -1062,10 +1055,16 @@ func (r *LiveMigrationReconciler) buildahRestorePipelined(ctx context.Context, p
 	// Channel to receive the processed results
 	resultChan := make(chan []corev1.Container)
 
-	// Fan-out the work across workers
+	// Determine the number of workers to use based on the number of files and system resources
+	numWorkers := runtime.NumCPU()
+	if len(files) < numWorkers {
+		numWorkers = len(files)
+	}
+
+	// Start the worker pool
 	var wg sync.WaitGroup
-	const numWorkers = 10
 	for i := 0; i < numWorkers; i++ {
+		wg.Add(1)
 		go func() {
 			defer wg.Done()
 			for file := range fileChan {
