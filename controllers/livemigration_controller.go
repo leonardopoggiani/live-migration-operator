@@ -7,6 +7,7 @@ import (
 	"github.com/fsnotify/fsnotify"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/apimachinery/pkg/watch"
+	"k8s.io/client-go/rest"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -79,9 +80,9 @@ func (r *LiveMigrationReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 	if migratingPod.Spec.Template.ObjectMeta.Name != "" {
 		template = &migratingPod.Spec.Template
 	} else {
-		template, err = r.getSourcePodTemplate(clientset, migratingPod.Spec.SourcePod)
+		template, err = r.GetSourcePodTemplate(clientset, migratingPod.Spec.SourcePod)
 		if err != nil || template == nil {
-			err = r.createDummyPod(clientset, ctx)
+			err = r.CreateDummyPod(clientset, ctx)
 			if err != nil {
 				klog.ErrorS(err, "failed to create dummy pod")
 			} else {
@@ -89,7 +90,7 @@ func (r *LiveMigrationReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 			}
 
 			// get the IP address of the Service
-			err = r.createDummyService(clientset, ctx)
+			err = r.CreateDummyService(clientset, ctx)
 			if err != nil {
 				klog.ErrorS(err, "failed to create dummy service")
 			}
@@ -275,7 +276,7 @@ func (r *LiveMigrationReconciler) checkPodExist(clientset *kubernetes.Clientset,
 	}
 }
 
-func (r *LiveMigrationReconciler) getSourcePodTemplate(clientset *kubernetes.Clientset, sourcePodName string) (*corev1.PodTemplateSpec, error) {
+func (r *LiveMigrationReconciler) GetSourcePodTemplate(clientset *kubernetes.Clientset, sourcePodName string) (*corev1.PodTemplateSpec, error) {
 	klog.Infof("", "getSourcePodTemplate", "sourcePodName", sourcePodName)
 	retrievedPod, err := r.checkPodExist(clientset, sourcePodName)
 	if retrievedPod == nil {
@@ -335,7 +336,7 @@ func (r *LiveMigrationReconciler) updateAnnotations(ctx context.Context, pod *co
 	return nil
 }
 
-func (r *LiveMigrationReconciler) checkpointPodCrio(containers []Container, namespace string, podName string) error {
+func checkpointPodCrio(containers []Container, namespace string, podName string) error {
 	// curl -sk -XPOST "https://localhost:10250/checkpoint/liqo-demo/tomcat-pod/tomcat"
 
 	for _, container := range containers {
@@ -354,7 +355,7 @@ func (r *LiveMigrationReconciler) checkpointPodCrio(containers []Container, name
 	return nil
 }
 
-func (r *LiveMigrationReconciler) checkpointPodPipelined(containers []Container, namespace string, podName string) error {
+func checkpointPodPipelined(containers []Container, namespace string, podName string) error {
 	var wg sync.WaitGroup
 	for _, container := range containers {
 		wg.Add(1)
@@ -632,7 +633,7 @@ func (r *LiveMigrationReconciler) migratePod(ctx context.Context, clientset *kub
 		return ctrl.Result{}, err
 	}
 
-	err = r.checkpointPodCrio(containers, "default", migratingPod.Name)
+	err = checkpointPodCrio(containers, "default", migratingPod.Name)
 	if err != nil {
 		klog.ErrorS(err, "unable to checkpoint")
 	}
@@ -681,7 +682,7 @@ func (r *LiveMigrationReconciler) migratePodPipelined(ctx context.Context, clien
 			klog.ErrorS(err, "failed to create checkpoints folder")
 			return
 		}
-		if err := r.checkpointPodPipelined(containers, "default", migratingPod.Name); err != nil {
+		if err := checkpointPodPipelined(containers, "default", migratingPod.Name); err != nil {
 			klog.ErrorS(err, "unable to checkpoint pod", "pod", migratingPod.Name)
 			return
 		}
@@ -739,7 +740,7 @@ func (r *LiveMigrationReconciler) migratePodPipelined(ctx context.Context, clien
 	return ctrl.Result{}, nil
 }
 
-func (r *LiveMigrationReconciler) createDummyPod(clientset *kubernetes.Clientset, ctx context.Context) error {
+func (r *LiveMigrationReconciler) CreateDummyPod(clientset *kubernetes.Clientset, ctx context.Context) error {
 	_, err := clientset.CoreV1().Pods("liqo-demo").Get(ctx, "dummy-pod", metav1.GetOptions{})
 	if err != nil {
 		klog.ErrorS(err, "failed to get dummy pod")
@@ -803,7 +804,7 @@ func (r *LiveMigrationReconciler) createDummyPod(clientset *kubernetes.Clientset
 	return nil
 }
 
-func (r *LiveMigrationReconciler) createDummyService(clientset *kubernetes.Clientset, ctx context.Context) error {
+func (r *LiveMigrationReconciler) CreateDummyService(clientset *kubernetes.Clientset, ctx context.Context) error {
 	_, err := clientset.CoreV1().Services("liqo-demo").Get(ctx, "dummy-service", metav1.GetOptions{})
 	if err != nil {
 		klog.ErrorS(err, "failed to get dummy service")
@@ -1310,6 +1311,20 @@ func retrieveContainerName(path string) string {
 	return ""
 }
 
+func (r *LiveMigrationReconciler) NewKubernetesClient() (*kubernetes.Clientset, error) {
+	config, err := rest.InClusterConfig()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get in-cluster config: %v", err)
+	}
+
+	clientset, err := kubernetes.NewForConfig(config)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create kubernetes client: %v", err)
+	}
+
+	return clientset, nil
+}
+
 func (r *LiveMigrationReconciler) pushDockerImage(localCheckpointPath string, containerName string, podName string) {
 	authFile := "/run/user/1000/containers/auth.json"
 	localCheckpointPath = "localhost/" + localCheckpointPath
@@ -1323,5 +1338,4 @@ func (r *LiveMigrationReconciler) pushDockerImage(localCheckpointPath string, co
 	}
 
 	klog.Infof("", "newPod", podName)
-
 }

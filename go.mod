@@ -6,6 +6,7 @@ require (
 	github.com/containers/buildah v1.30.0
 	github.com/containers/storage v1.46.1
 	github.com/emicklei/go-restful/v3 v3.10.2
+	github.com/fsnotify/fsnotify v1.6.0
 	github.com/onsi/ginkgo/v2 v2.9.2
 	github.com/onsi/gomega v1.27.6
 	k8s.io/api v0.26.3
@@ -47,7 +48,6 @@ require (
 	github.com/docker/go-connections v0.4.1-0.20210727194412-58542c764a11 // indirect
 	github.com/docker/go-units v0.5.0 // indirect
 	github.com/evanphx/json-patch/v5 v5.6.0 // indirect
-	github.com/fsnotify/fsnotify v1.6.0 // indirect
 	github.com/fsouza/go-dockerclient v1.9.7 // indirect
 	github.com/go-logr/logr v1.2.3 // indirect
 	github.com/go-logr/zapr v1.2.3 // indirect
