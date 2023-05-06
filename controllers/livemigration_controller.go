@@ -4,10 +4,6 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"github.com/fsnotify/fsnotify"
-	"k8s.io/apimachinery/pkg/util/intstr"
-	"k8s.io/apimachinery/pkg/watch"
-	"k8s.io/client-go/rest"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -16,6 +12,11 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/fsnotify/fsnotify"
+	"k8s.io/apimachinery/pkg/util/intstr"
+	"k8s.io/apimachinery/pkg/watch"
+	"k8s.io/client-go/rest"
 
 	api "github.com/leonardopoggiani/live-migration-operator/api/v1alpha1"
 	appsv1 "k8s.io/api/apps/v1"
@@ -155,7 +156,7 @@ func (r *LiveMigrationReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 					if strings.Contains(event.Name, "/checkpoints/") && strings.Contains(event.Name, "dummy") {
 						// restoredPod, err := r.buildahRestore(ctx, "/checkpoints/")
 						// restoredPod, err := r.buildahRestoreParallelized(ctx, "/checkpoints/")
-						restoredPod, err := r.buildahRestorePipelined(ctx, "/checkpoints/")
+						restoredPod, err := r.BuildahRestorePipelined(ctx, "/checkpoints/")
 						if err != nil {
 							klog.ErrorS(err, "failed to restore pod")
 						} else {
@@ -187,13 +188,13 @@ func (r *LiveMigrationReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 				klog.Infof("stop checking for sourcePod")
 				return
 			default:
-				sourcePod, err := r.checkPodExist(clientset, annotations["sourcePod"])
+				sourcePod, err := r.CheckPodExist(clientset, annotations["sourcePod"])
 				if err != nil {
 					klog.ErrorS(err, "failed to get sourcePod", "pod", annotations["sourcePod"])
 					return
 				}
 				if sourcePod != nil {
-					_, err := r.migratePodPipelined(ctx, clientset, &migratingPod)
+					_, err := r.MigratePodPipelined(ctx, clientset, &migratingPod)
 					// _, err = r.migratePod(ctx, clientset, &migratingPod)
 					if err != nil {
 						klog.ErrorS(err, "failed to migrate pod", "pod", sourcePod.Name)
@@ -228,7 +229,7 @@ func (r *LiveMigrationReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Complete(r)
 }
 
-func (r *LiveMigrationReconciler) getActualRunningPod(childPods *corev1.PodList) (int, corev1.PodList, corev1.PodList) {
+func (r *LiveMigrationReconciler) GetActualRunningPod(childPods *corev1.PodList) (int, corev1.PodList, corev1.PodList) {
 	// if a pod is deleted, remove it from Actual running pod list
 	count := 0
 	var actualRunningPod, isDeletingPod corev1.PodList
@@ -264,7 +265,7 @@ func (r *LiveMigrationReconciler) deletePod(ctx context.Context, pod *corev1.Pod
 	return nil
 }
 
-func (r *LiveMigrationReconciler) checkPodExist(clientset *kubernetes.Clientset, name string) (*corev1.Pod, error) {
+func (r *LiveMigrationReconciler) CheckPodExist(clientset *kubernetes.Clientset, name string) (*corev1.Pod, error) {
 
 	existingPod, err := clientset.CoreV1().Pods("default").Get(context.Background(), name, metav1.GetOptions{})
 	if err != nil {
@@ -278,7 +279,7 @@ func (r *LiveMigrationReconciler) checkPodExist(clientset *kubernetes.Clientset,
 
 func (r *LiveMigrationReconciler) GetSourcePodTemplate(clientset *kubernetes.Clientset, sourcePodName string) (*corev1.PodTemplateSpec, error) {
 	klog.Infof("", "getSourcePodTemplate", "sourcePodName", sourcePodName)
-	retrievedPod, err := r.checkPodExist(clientset, sourcePodName)
+	retrievedPod, err := r.CheckPodExist(clientset, sourcePodName)
 	if retrievedPod == nil {
 		return nil, err
 	} else {
@@ -297,10 +298,10 @@ func (r *LiveMigrationReconciler) GetSourcePodTemplate(clientset *kubernetes.Cli
 	return template, nil
 }
 
-func (r *LiveMigrationReconciler) removeCheckpointPod(ctx context.Context, clientset *kubernetes.Clientset, pod *corev1.Pod, snapshotPathCurrent, newPodName string) error {
+func (r *LiveMigrationReconciler) RemoveCheckpointPod(ctx context.Context, clientset *kubernetes.Clientset, pod *corev1.Pod, snapshotPathCurrent, newPodName string) error {
 	if newPodName != "" {
 		for {
-			ok, _ := r.checkPodExist(clientset, newPodName)
+			ok, _ := r.CheckPodExist(clientset, newPodName)
 			if ok != nil {
 				break
 			}
@@ -336,7 +337,7 @@ func (r *LiveMigrationReconciler) updateAnnotations(ctx context.Context, pod *co
 	return nil
 }
 
-func (r *LiveMigrationReconciler) checkpointPodCrio(containers []Container, namespace string, podName string) error {
+func (r *LiveMigrationReconciler) CheckpointPodCrio(containers []Container, namespace string, podName string) error {
 	// curl -sk -XPOST "https://localhost:10250/checkpoint/liqo-demo/tomcat-pod/tomcat"
 
 	for _, container := range containers {
@@ -355,7 +356,7 @@ func (r *LiveMigrationReconciler) checkpointPodCrio(containers []Container, name
 	return nil
 }
 
-func (r *LiveMigrationReconciler) checkpointPodPipelined(containers []Container, namespace string, podName string) error {
+func (r *LiveMigrationReconciler) CheckpointPodPipelined(containers []Container, namespace string, podName string) error {
 	var wg sync.WaitGroup
 	for _, container := range containers {
 		wg.Add(1)
@@ -410,7 +411,7 @@ func PrintContainerIDs(clientset *kubernetes.Clientset, namespace string) ([]Con
 	return containers, nil
 }
 
-func (r *LiveMigrationReconciler) waitForContainerReady(podName string, namespace string, containerName string, clientset *kubernetes.Clientset) error {
+func (r *LiveMigrationReconciler) WaitForContainerReady(podName string, namespace string, containerName string, clientset *kubernetes.Clientset) error {
 	timeout := 60 * time.Second
 	interval := 1 * time.Second
 	timer := time.NewTimer(timeout)
@@ -440,7 +441,7 @@ func (r *LiveMigrationReconciler) waitForContainerReady(podName string, namespac
 	}
 }
 
-func (r *LiveMigrationReconciler) terminateCheckpointedPod(ctx context.Context, podName string, clientset *kubernetes.Clientset) error {
+func (r *LiveMigrationReconciler) TerminateCheckpointedPod(ctx context.Context, podName string, clientset *kubernetes.Clientset) error {
 	// get the pod by name
 	klog.Infof("", "Terminating pod ", podName)
 
@@ -459,7 +460,7 @@ func (r *LiveMigrationReconciler) terminateCheckpointedPod(ctx context.Context, 
 		klog.Info("pod deleted ", podName)
 	}
 
-	err = waitForPodDeletion(ctx, podName, "default", clientset)
+	err = WaitForPodDeletion(ctx, podName, "default", clientset)
 	if err != nil {
 		klog.ErrorS(err, "unable to finish delete pod", "pod", pod.Name)
 	} else {
@@ -470,7 +471,7 @@ func (r *LiveMigrationReconciler) terminateCheckpointedPod(ctx context.Context, 
 	return nil
 }
 
-func waitForPodDeletion(ctx context.Context, podName string, namespace string, clientset *kubernetes.Clientset) error {
+func WaitForPodDeletion(ctx context.Context, podName string, namespace string, clientset *kubernetes.Clientset) error {
 
 	fieldSelector := fmt.Sprintf("metadata.name=%s", podName)
 
@@ -503,9 +504,9 @@ func waitForPodDeletion(ctx context.Context, podName string, namespace string, c
 	return fmt.Errorf("pod %s not found or already deleted", podName)
 }
 
-func (r *LiveMigrationReconciler) migrateCheckpoint(ctx context.Context, files []os.DirEntry, dir string, clientset *kubernetes.Clientset) error {
+func (r *LiveMigrationReconciler) MigrateCheckpoint(ctx context.Context, files []os.DirEntry, dir string, clientset *kubernetes.Clientset) error {
 
-	dummyIp, dummyPort := r.getDummyServiceIPAndPort(clientset, ctx)
+	dummyIp, dummyPort := r.GetDummyServiceIPAndPort(clientset, ctx)
 	for _, file := range files {
 
 		checkpointPath := filepath.Join(dir, file.Name())
@@ -534,7 +535,7 @@ func (r *LiveMigrationReconciler) migrateCheckpoint(ctx context.Context, files [
 	return nil
 }
 
-func (r *LiveMigrationReconciler) migrateCheckpointParallelized(ctx context.Context, files []os.DirEntry, dir string) error {
+func (r *LiveMigrationReconciler) MigrateCheckpointParallelized(ctx context.Context, files []os.DirEntry, dir string) error {
 
 	kubeconfigPath := os.Getenv("KUBECONFIG")
 	if kubeconfigPath == "" {
@@ -558,7 +559,7 @@ func (r *LiveMigrationReconciler) migrateCheckpointParallelized(ctx context.Cont
 	}
 
 	// inside the worker function for uploading files
-	dummyIp, dummyPort := r.getDummyServiceIPAndPort(clientset, ctx)
+	dummyIp, dummyPort := r.GetDummyServiceIPAndPort(clientset, ctx)
 
 	var wg sync.WaitGroup
 	for _, entry := range files {
@@ -616,7 +617,7 @@ func (r *LiveMigrationReconciler) migrateCheckpointParallelized(ctx context.Cont
 	return nil
 }
 
-func (r *LiveMigrationReconciler) migratePod(ctx context.Context, clientset *kubernetes.Clientset, migratingPod *api.LiveMigration) (ctrl.Result, error) {
+func (r *LiveMigrationReconciler) MigratePod(ctx context.Context, clientset *kubernetes.Clientset, migratingPod *api.LiveMigration) (ctrl.Result, error) {
 	containers, err := PrintContainerIDs(clientset, "default")
 	if err != nil {
 		klog.ErrorS(err, "unable to get container IDs")
@@ -633,7 +634,7 @@ func (r *LiveMigrationReconciler) migratePod(ctx context.Context, clientset *kub
 		return ctrl.Result{}, err
 	}
 
-	err = r.checkpointPodCrio(containers, "default", migratingPod.Name)
+	err = r.CheckpointPodCrio(containers, "default", migratingPod.Name)
 	if err != nil {
 		klog.ErrorS(err, "unable to checkpoint")
 	}
@@ -643,7 +644,7 @@ func (r *LiveMigrationReconciler) migratePod(ctx context.Context, clientset *kub
 		klog.ErrorS(err, "failed to change owner of checkpoints folder")
 	}
 
-	err = r.terminateCheckpointedPod(ctx, migratingPod.Name, clientset)
+	err = r.TerminateCheckpointedPod(ctx, migratingPod.Name, clientset)
 	if err != nil {
 		klog.ErrorS(err, "unable to terminate checkpointed pod", "pod", migratingPod.Name)
 	}
@@ -655,7 +656,7 @@ func (r *LiveMigrationReconciler) migratePod(ctx context.Context, clientset *kub
 
 	klog.Infof("pathToClear", "pathToClear", pathToClear)
 
-	err = r.migrateCheckpointParallelized(ctx, files, pathToClear)
+	err = r.MigrateCheckpointParallelized(ctx, files, pathToClear)
 	if err != nil {
 		klog.ErrorS(err, "migration failed")
 	}
@@ -663,7 +664,7 @@ func (r *LiveMigrationReconciler) migratePod(ctx context.Context, clientset *kub
 	return ctrl.Result{}, nil
 }
 
-func (r *LiveMigrationReconciler) migratePodPipelined(ctx context.Context, clientset *kubernetes.Clientset, migratingPod *api.LiveMigration) (ctrl.Result, error) {
+func (r *LiveMigrationReconciler) MigratePodPipelined(ctx context.Context, clientset *kubernetes.Clientset, migratingPod *api.LiveMigration) (ctrl.Result, error) {
 	containers, err := PrintContainerIDs(clientset, "default")
 	if err != nil {
 		klog.ErrorS(err, "unable to get container IDs")
@@ -682,7 +683,7 @@ func (r *LiveMigrationReconciler) migratePodPipelined(ctx context.Context, clien
 			klog.ErrorS(err, "failed to create checkpoints folder")
 			return
 		}
-		if err := r.checkpointPodPipelined(containers, "default", migratingPod.Name); err != nil {
+		if err := r.CheckpointPodPipelined(containers, "default", migratingPod.Name); err != nil {
 			klog.ErrorS(err, "unable to checkpoint pod", "pod", migratingPod.Name)
 			return
 		}
@@ -706,7 +707,7 @@ func (r *LiveMigrationReconciler) migratePodPipelined(ctx context.Context, clien
 				klog.ErrorS(err, "unable to read dir", "dir", path)
 				return
 			}
-			if err := r.migrateCheckpointParallelized(ctx, files, path); err != nil {
+			if err := r.MigrateCheckpointParallelized(ctx, files, path); err != nil {
 				klog.ErrorS(err, "migration failed", "dir", path)
 				return
 			}
@@ -719,7 +720,7 @@ func (r *LiveMigrationReconciler) migratePodPipelined(ctx context.Context, clien
 		close(migratedCheckpoints)
 	}()
 
-	if err := r.terminateCheckpointedPod(ctx, migratingPod.Name, clientset); err != nil {
+	if err := r.TerminateCheckpointedPod(ctx, migratingPod.Name, clientset); err != nil {
 		klog.ErrorS(err, "unable to terminate checkpointed pod", "pod", migratingPod.Name)
 		return ctrl.Result{}, err
 	} else {
@@ -790,7 +791,7 @@ func (r *LiveMigrationReconciler) CreateDummyPod(clientset *kubernetes.Clientset
 			return err
 		}
 
-		err = r.waitForContainerReady(pod.Name, "liqo-demo", "dummy-container", clientset)
+		err = r.WaitForContainerReady(pod.Name, "liqo-demo", "dummy-container", clientset)
 		if err != nil {
 			klog.ErrorS(err, "failed to wait for container ready")
 		} else {
@@ -842,7 +843,7 @@ func (r *LiveMigrationReconciler) CreateDummyService(clientset *kubernetes.Clien
 	return nil
 }
 
-func (r *LiveMigrationReconciler) getDummyServiceIPAndPort(clientset *kubernetes.Clientset, ctx context.Context) (string, int32) {
+func (r *LiveMigrationReconciler) GetDummyServiceIPAndPort(clientset *kubernetes.Clientset, ctx context.Context) (string, int32) {
 	dummyService, err := clientset.CoreV1().Services("liqo-demo").Get(ctx, "dummy-service", metav1.GetOptions{})
 	if err != nil {
 		klog.ErrorS(err, "failed to get dummy service")
@@ -853,7 +854,7 @@ func (r *LiveMigrationReconciler) getDummyServiceIPAndPort(clientset *kubernetes
 	return dummyService.Spec.ClusterIP, dummyService.Spec.Ports[0].Port
 }
 
-func (r *LiveMigrationReconciler) buildahRestore(ctx context.Context, path string) (*corev1.Pod, error) {
+func (r *LiveMigrationReconciler) BuildahRestore(ctx context.Context, path string) (*corev1.Pod, error) {
 	var containersList []corev1.Container
 	var podName string
 
@@ -996,7 +997,7 @@ func (r *LiveMigrationReconciler) buildahRestore(ctx context.Context, path strin
 	return pod, nil
 }
 
-func (r *LiveMigrationReconciler) buildahRestoreParallelized(ctx context.Context, path string) (*corev1.Pod, error) {
+func (r *LiveMigrationReconciler) BuildahRestoreParallelized(ctx context.Context, path string) (*corev1.Pod, error) {
 	var containersList []corev1.Container
 	var podName string
 
@@ -1064,7 +1065,7 @@ func (r *LiveMigrationReconciler) buildahRestoreParallelized(ctx context.Context
 	return pod, nil
 }
 
-func (r *LiveMigrationReconciler) buildahRestorePipelined(ctx context.Context, path string) (*corev1.Pod, error) {
+func (r *LiveMigrationReconciler) BuildahRestorePipelined(ctx context.Context, path string) (*corev1.Pod, error) {
 	files := getFiles(path) // Get list of files to process
 	podName := retrievePodName(files[0].Name())
 
@@ -1325,7 +1326,7 @@ func (r *LiveMigrationReconciler) NewKubernetesClient() (*kubernetes.Clientset, 
 	return clientset, nil
 }
 
-func (r *LiveMigrationReconciler) pushDockerImage(localCheckpointPath string, containerName string, podName string) {
+func (r *LiveMigrationReconciler) PushDockerImage(localCheckpointPath string, containerName string, podName string) {
 	authFile := "/run/user/1000/containers/auth.json"
 	localCheckpointPath = "localhost/" + localCheckpointPath
 	remoteCheckpointPath := "docker.io/leonardopoggiani/checkpoint-images:" + containerName
