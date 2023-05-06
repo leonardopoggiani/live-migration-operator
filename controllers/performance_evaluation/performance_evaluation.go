@@ -130,7 +130,75 @@ func getCheckpointSize(clientset *kubernetes.Clientset, numContainers int) {
 	fmt.Printf("The size of %s is %d bytes.\n", directory, size)
 }
 
-func getTotalTime(clientset *kubernetes.Clientset, podName string) {
+func getTotalTime(clientset *kubernetes.Clientset, numContainers int) (time.Duration, error) {
+	// Define the Pod manifest
+	podManifest := []byte(fmt.Sprintf(
+		`apiVersion: v1
+		kind: Pod
+		metadata:
+		  name: test-pod-%d-containers
+		spec:
+		  containers:`,
+		numContainers))
+
+	// Add the specified number of containers to the Pod manifest
+	for i := 0; i < numContainers; i++ {
+		containerManifest := fmt.Sprintf(
+			`- name: container-%d
+			image: nginx`,
+			i)
+		podManifest = append(podManifest, []byte(containerManifest)...)
+	}
+
+	// Finish the Pod manifest
+	podManifest = append(podManifest, []byte(`
+  		restartPolicy: Never
+	`)...)
+
+	// Create the Pod
+	pod, err := clientset.CoreV1().Pods("default").Create(context.TODO(), &v1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: fmt.Sprintf("test-pod-%d-containers", numContainers),
+			Labels: map[string]string{
+				"app": "test",
+			},
+		},
+		Spec: v1.PodSpec{
+			Containers: []v1.Container{
+				{
+					Name:  "nginx",
+					Image: "nginx",
+				},
+			},
+		},
+	}, metav1.CreateOptions{})
+	if err != nil {
+		panic(err.Error())
+	}
+
+	fmt.Printf("Pod %s is ready\n", pod.Name)
+
+	LiveMigrationReconciler := controllers.LiveMigrationReconciler{}
+	var containers []controllers.Container
+
+	// Append the container ID and name for each container in each pod
+	pods, err := clientset.CoreV1().Pods("default").List(context.Background(), metav1.ListOptions{})
+
+	for _, pod := range pods.Items {
+		for _, containerStatus := range pod.Status.ContainerStatuses {
+			idParts := strings.Split(containerStatus.ContainerID, "//")
+			if len(idParts) < 2 {
+				return 0, nil
+			}
+			containerID := idParts[1]
+
+			container := controllers.Container{
+				ID:   containerID,
+				Name: containerStatus.Name,
+			}
+			containers = append(containers, container)
+		}
+	}
 
 	// Get the start time of the checkpoint
 	start := time.Now()
