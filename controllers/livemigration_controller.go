@@ -336,7 +336,7 @@ func (r *LiveMigrationReconciler) updateAnnotations(ctx context.Context, pod *co
 	return nil
 }
 
-func checkpointPodCrio(containers []Container, namespace string, podName string) error {
+func (r *LiveMigrationReconciler) checkpointPodCrio(containers []Container, namespace string, podName string) error {
 	// curl -sk -XPOST "https://localhost:10250/checkpoint/liqo-demo/tomcat-pod/tomcat"
 
 	for _, container := range containers {
@@ -355,7 +355,7 @@ func checkpointPodCrio(containers []Container, namespace string, podName string)
 	return nil
 }
 
-func checkpointPodPipelined(containers []Container, namespace string, podName string) error {
+func (r *LiveMigrationReconciler) checkpointPodPipelined(containers []Container, namespace string, podName string) error {
 	var wg sync.WaitGroup
 	for _, container := range containers {
 		wg.Add(1)
@@ -633,7 +633,7 @@ func (r *LiveMigrationReconciler) migratePod(ctx context.Context, clientset *kub
 		return ctrl.Result{}, err
 	}
 
-	err = checkpointPodCrio(containers, "default", migratingPod.Name)
+	err = r.checkpointPodCrio(containers, "default", migratingPod.Name)
 	if err != nil {
 		klog.ErrorS(err, "unable to checkpoint")
 	}
@@ -682,7 +682,7 @@ func (r *LiveMigrationReconciler) migratePodPipelined(ctx context.Context, clien
 			klog.ErrorS(err, "failed to create checkpoints folder")
 			return
 		}
-		if err := checkpointPodPipelined(containers, "default", migratingPod.Name); err != nil {
+		if err := r.checkpointPodPipelined(containers, "default", migratingPod.Name); err != nil {
 			klog.ErrorS(err, "unable to checkpoint pod", "pod", migratingPod.Name)
 			return
 		}

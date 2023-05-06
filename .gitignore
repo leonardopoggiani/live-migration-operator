@@ -25,6 +25,8 @@ api-server/out/*
 build
 deployments
 hack
+vendor/*
+vendor
 
 checkpoints
 checkpoints/*
@@ -36,3 +38,4 @@ logs/
 *.txt
 config/samples/
 config/samples/*
+/vendor/
