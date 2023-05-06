@@ -1,4 +1,4 @@
-module github.com/leonardopoggiani/Pod-migration/live-migration-operator
+module github.com/leonardopoggiani/live-migration-operator
 
 go 1.20
 
