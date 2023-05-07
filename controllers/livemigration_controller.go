@@ -347,8 +347,6 @@ func (r *LiveMigrationReconciler) CheckpointPodCrio(containers []Container, name
 		output, err := checkpointCmd.CombinedOutput()
 		if err != nil {
 			klog.ErrorS(err, "failed to checkpoint container", "output", string(output))
-		} else {
-			klog.InfoS("checkpointed pod", "output", string(output))
 		}
 
 	}
@@ -357,23 +355,18 @@ func (r *LiveMigrationReconciler) CheckpointPodCrio(containers []Container, name
 }
 
 func (r *LiveMigrationReconciler) CheckpointPodPipelined(containers []Container, namespace string, podName string) error {
-	var wg sync.WaitGroup
 	for _, container := range containers {
-		wg.Add(1)
 		go func(containerName string) {
-			defer wg.Done()
 			curlPath := "https://localhost:10250/checkpoint/" + namespace + "/" + podName + "/" + containerName
 			checkpointCmd := exec.Command("curl", "-sk", "-XPOST", curlPath)
 
 			output, err := checkpointCmd.CombinedOutput()
 			if err != nil {
 				klog.ErrorS(err, "failed to checkpoint container", "output", string(output))
-			} else {
-				klog.InfoS("checkpointed pod", "output", string(output))
 			}
 		}(container.Name)
 	}
-	wg.Wait()
+
 	return nil
 }
 
