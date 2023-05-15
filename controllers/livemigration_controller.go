@@ -156,7 +156,7 @@ func (r *LiveMigrationReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 					if strings.Contains(event.Name, "/checkpoints/") && strings.Contains(event.Name, "dummy") {
 						// restoredPod, err := r.buildahRestore(ctx, "/checkpoints/")
 						// restoredPod, err := r.buildahRestoreParallelized(ctx, "/checkpoints/")
-						restoredPod, err := r.BuildahRestorePipelined(ctx, "/checkpoints/")
+						restoredPod, err := r.BuildahRestorePipelined(ctx, "/checkpoints/", clientset)
 						if err != nil {
 							klog.ErrorS(err, "failed to restore pod")
 						} else {
@@ -847,7 +847,7 @@ func (r *LiveMigrationReconciler) GetDummyServiceIPAndPort(clientset *kubernetes
 	return dummyService.Spec.ClusterIP, dummyService.Spec.Ports[0].Port
 }
 
-func (r *LiveMigrationReconciler) BuildahRestore(ctx context.Context, path string) (*corev1.Pod, error) {
+func (r *LiveMigrationReconciler) BuildahRestore(ctx context.Context, path string, clientset *kubernetes.Clientset) (*corev1.Pod, error) {
 	var containersList []corev1.Container
 	var podName string
 
@@ -981,7 +981,7 @@ func (r *LiveMigrationReconciler) BuildahRestore(ctx context.Context, path strin
 		},
 	}
 
-	if err := r.Create(ctx, pod); err != nil {
+	if pod, err = clientset.CoreV1().Pods("default").Create(ctx, pod, metav1.CreateOptions{}); err != nil {
 		klog.ErrorS(err, "failed to create restored pod", "podName", podName)
 	} else {
 		klog.InfoS("restored pod", "podName", podName)
@@ -990,7 +990,7 @@ func (r *LiveMigrationReconciler) BuildahRestore(ctx context.Context, path strin
 	return pod, nil
 }
 
-func (r *LiveMigrationReconciler) BuildahRestoreParallelized(ctx context.Context, path string) (*corev1.Pod, error) {
+func (r *LiveMigrationReconciler) BuildahRestoreParallelized(ctx context.Context, path string, clientset *kubernetes.Clientset) (*corev1.Pod, error) {
 	var containersList []corev1.Container
 	var podName string
 
@@ -1049,7 +1049,7 @@ func (r *LiveMigrationReconciler) BuildahRestoreParallelized(ctx context.Context
 		},
 	}
 
-	if err := r.Create(ctx, pod); err != nil {
+	if pod, err = clientset.CoreV1().Pods("default").Create(ctx, pod, metav1.CreateOptions{}); err != nil {
 		klog.ErrorS(err, "failed to create restored pod", "podName", podName)
 	} else {
 		klog.InfoS("restored pod", "podName", podName)
@@ -1058,7 +1058,7 @@ func (r *LiveMigrationReconciler) BuildahRestoreParallelized(ctx context.Context
 	return pod, nil
 }
 
-func (r *LiveMigrationReconciler) BuildahRestorePipelined(ctx context.Context, path string) (*corev1.Pod, error) {
+func (r *LiveMigrationReconciler) BuildahRestorePipelined(ctx context.Context, path string, clientset *kubernetes.Clientset) (*corev1.Pod, error) {
 	files := getFiles(path) // Get list of files to process
 	podName := retrievePodName(files[0].Name())
 
@@ -1124,7 +1124,7 @@ func (r *LiveMigrationReconciler) BuildahRestorePipelined(ctx context.Context, p
 		},
 	}
 
-	if err := r.Create(ctx, pod); err != nil {
+	if pod, err := clientset.CoreV1().Pods("default").Create(ctx, pod, metav1.CreateOptions{}); err != nil {
 		klog.ErrorS(err, "failed to create restored pod", "podName", pod.Name)
 		return nil, err
 	}
