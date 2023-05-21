@@ -497,12 +497,18 @@ func WaitForPodDeletion(ctx context.Context, podName string, namespace string, c
 	return fmt.Errorf("pod %s not found or already deleted", podName)
 }
 
-func (r *LiveMigrationReconciler) MigrateCheckpoint(ctx context.Context, files []os.DirEntry, dir string, clientset *kubernetes.Clientset) error {
+func (r *LiveMigrationReconciler) MigrateCheckpoint(ctx context.Context, directory string, clientset *kubernetes.Clientset) error {
+
+	files, err := os.ReadDir(directory)
+	if err != nil {
+		klog.ErrorS(err, "failed to read dir", "dir", directory)
+		return err
+	}
 
 	dummyIp, dummyPort := r.GetDummyServiceIPAndPort(clientset, ctx)
 	for _, file := range files {
 
-		checkpointPath := filepath.Join(dir, file.Name())
+		checkpointPath := filepath.Join(directory, file.Name())
 		klog.Infof("checkpointPath: %s", checkpointPath)
 
 		// change permissions of checkpoint file
