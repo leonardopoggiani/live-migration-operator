@@ -503,9 +503,12 @@ func (r *LiveMigrationReconciler) MigrateCheckpoint(ctx context.Context, directo
 	if err != nil {
 		klog.ErrorS(err, "failed to read dir", "dir", directory)
 		return err
+	} else {
+		klog.Infof("files in dir: %s", files)
 	}
 
 	dummyIp, dummyPort := r.GetDummyServiceIPAndPort(clientset, ctx)
+
 	for _, file := range files {
 
 		checkpointPath := filepath.Join(directory, file.Name())
