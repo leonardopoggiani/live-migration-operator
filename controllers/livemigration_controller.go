@@ -455,7 +455,7 @@ func (r *LiveMigrationReconciler) TerminateCheckpointedPod(ctx context.Context, 
 		klog.Info("pod deleted ", podName)
 	}
 
-	err = WaitForPodDeletion(ctx, podName, "default", clientset)
+	err = r.WaitForPodDeletion(ctx, podName, "default", clientset)
 	if err != nil {
 		klog.ErrorS(err, "unable to finish delete pod", "pod", pod.Name)
 	} else {
@@ -466,7 +466,7 @@ func (r *LiveMigrationReconciler) TerminateCheckpointedPod(ctx context.Context, 
 	return nil
 }
 
-func WaitForPodDeletion(ctx context.Context, podName string, namespace string, clientset *kubernetes.Clientset) error {
+func (r *LiveMigrationReconciler) WaitForPodDeletion(ctx context.Context, podName string, namespace string, clientset *kubernetes.Clientset) error {
 
 	fieldSelector := fmt.Sprintf("metadata.name=%s", podName)
 
