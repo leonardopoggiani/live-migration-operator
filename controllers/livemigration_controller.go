@@ -783,7 +783,7 @@ func (r *LiveMigrationReconciler) CreateDummyPod(clientset *kubernetes.Clientset
 						Name: "checkpoint-files",
 						VolumeSource: corev1.VolumeSource{
 							HostPath: &corev1.HostPathVolumeSource{
-								Path: "/checkpoints",
+								Path: "/tmp/checkpoints/checkpoints",
 							},
 						},
 					},
