@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/fsnotify/fsnotify"
+	_ "go.uber.org/automaxprocs"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/apimachinery/pkg/watch"
 	"k8s.io/client-go/rest"
@@ -407,8 +408,8 @@ func PrintContainerIDs(clientset *kubernetes.Clientset, namespace string) ([]Con
 }
 
 func (r *LiveMigrationReconciler) WaitForContainerReady(podName string, namespace string, containerName string, clientset *kubernetes.Clientset) error {
-	timeout := 60 * time.Second
-	interval := 1 * time.Second
+	timeout := 180 * time.Second
+	interval := 5 * time.Second
 	timer := time.NewTimer(timeout)
 	defer timer.Stop()
 
