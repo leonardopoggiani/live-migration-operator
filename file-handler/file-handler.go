@@ -5,7 +5,6 @@ import (
 	"mime/multipart"
 	"net/http"
 	"os"
-	"path/filepath"
 
 	"k8s.io/klog/v2"
 )
@@ -35,29 +34,21 @@ func handleFile(w http.ResponseWriter, r *http.Request) {
 			}
 		}(file)
 
-		hostPath := "/tmp/checkpoints/checkpoints"
-		filePath := filepath.Join(hostPath, header.Filename)
-		klog.Infof("Saving file to host system...", "file", filePath)
+		klog.Infof("Saving file to disk...", "file", header.Filename)
 
-		outFile, err := os.Create(filePath)
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-		defer func(outFile *os.File) {
-			err := outFile.Close()
-			if err != nil {
-				klog.ErrorS(err, "Failed to close output file.")
-			}
-		}(outFile)
-
-		_, err = io.Copy(outFile, file)
+		bytes, err := io.ReadAll(file)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
 
-		klog.Infof("File saved successfully on the host system.")
+		err = os.WriteFile("/mnt/data/"+header.Filename, bytes, 0644)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+
+		klog.Infof("File saved successfully.")
 		return
 	} else if r.Method == "GET" {
 		klog.Infof("Debug GET request received.")

@@ -538,6 +538,24 @@ func (r *LiveMigrationReconciler) MigrateCheckpoint(ctx context.Context, directo
 		}
 	}
 
+	// send a dummy file at the end to signal the end of the migration
+	createDummyFile := exec.Command("sudo", "touch", "/tmp/checkpoints/checkpoints/dummy")
+	createDummyFileOutput, err := createDummyFile.Output()
+	if err != nil {
+		klog.ErrorS(err, "failed to create dummy file", "output", createDummyFileOutput)
+	}
+
+	dummyPath := "/tmp/checkpoints/checkpoints/dummy"
+
+	postCmd := exec.Command("curl", "-X", "POST", "-F", fmt.Sprintf("file=@%s", dummyPath), fmt.Sprintf("http://%s:%d/upload", dummyIp, dummyPort))
+	klog.Infof("post command", "cmd", postCmd.String())
+	postOut, err := postCmd.CombinedOutput()
+	if err != nil {
+		klog.ErrorS(err, "failed to post on the service", "service", "dummy-service")
+	} else {
+		klog.Infof("post on the service", "service", "dummy-service", "out", string(postOut))
+	}
+
 	return nil
 }
 
