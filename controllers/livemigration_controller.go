@@ -511,6 +511,7 @@ func (r *LiveMigrationReconciler) MigrateCheckpoint(ctx context.Context, directo
 	}
 
 	dummyIp, dummyPort := r.GetDummyServiceIPAndPort(clientset, ctx)
+	fmt.Println("dummyIp: ", dummyIp, "dummyPort: ", dummyPort)
 
 	for _, file := range files {
 
