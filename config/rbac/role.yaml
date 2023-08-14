@@ -1,0 +1,33 @@
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  creationTimestamp: null
+  name: manager-role
+rules:
+- apiGroups:
+  - livemigration.liqo.io
+  resources:
+  - livemigrations
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - livemigration.liqo.io
+  resources:
+  - livemigrations/finalizers
+  verbs:
+  - update
+- apiGroups:
+  - livemigration.liqo.io
+  resources:
+  - livemigrations/status
+  verbs:
+  - get
+  - patch
+  - update

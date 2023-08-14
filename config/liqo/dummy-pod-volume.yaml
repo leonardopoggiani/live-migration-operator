@@ -1,0 +1,22 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: checkpoint-dummy-pod
+  namespace: liqo-demo
+spec:
+  containers:
+  - name: checkpoint-dummy-container
+    image: docker.io/library/busybox:latest
+    command: ["/bin/sh", "-c", "while true; do echo $(date -u) >> /data/out.txt; sleep 5; done"]
+    volumeMounts:
+    - name: checkpoint-volume
+      mountPath: /data
+  tolerations:
+  - key: virtual-node.liqo.io/not-allowed
+    operator: Exists
+    effect: NoExecute
+    tolerationSeconds: 300
+  volumes:
+  - name: checkpoint-volume
+    persistentVolumeClaim:
+      claimName: checkpoint-pvc
