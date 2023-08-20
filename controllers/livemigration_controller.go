@@ -13,6 +13,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/coocood/freecache"
 	"github.com/fsnotify/fsnotify"
 	_ "go.uber.org/automaxprocs"
 	"k8s.io/apimachinery/pkg/util/intstr"
@@ -29,6 +30,9 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
+
+var cacheSize = 100 * 1024 * 1024 // 100MB
+var fileCache = freecache.NewCache(cacheSize)
 
 // LiveMigrationReconciler reconciles a LiveMigration object
 type LiveMigrationReconciler struct {
@@ -559,23 +563,38 @@ func (r *LiveMigrationReconciler) MigrateCheckpointParallelized(ctx context.Cont
 			checkpointPath := filepath.Join(dir, file.Name())
 			klog.Infof("checkpointPath: %s", checkpointPath)
 
-			// change permissions of checkpoint file
-			// sudo chmod +r /tmp/checkpoints/checkpoints/checkpoint-tomcat-pod_liqo-demo-tomcat-2023-04-18T09:39:13Z.tar
-			chmodCmd := exec.Command("sudo", "chmod", "+rwx", checkpointPath)
-			_, err = chmodCmd.Output()
-			if err != nil {
-				klog.ErrorS(err, "failed to change permissions of checkpoint file", "checkpointPath", checkpointPath)
-			} else {
-				klog.Infof("checkpoint file permissions changed: %s", checkpointPath)
-			}
+			// Check if the file is already in the cache.
+			cacheKey := checkpointPath
+			cachedData, err := fileCache.Get([]byte(cacheKey))
+			if err == nil {
+				klog.Infof("Found file data in cache for: %s", checkpointPath)
 
-			postCmd := exec.Command("curl", "-X", "POST", "-F", fmt.Sprintf("file=@%s", checkpointPath), fmt.Sprintf("http://%s:%d/upload", dummyIp, dummyPort))
-			klog.Infof("post command", "cmd", postCmd.String())
-			postOut, err := postCmd.CombinedOutput()
-			if err != nil {
-				klog.ErrorS(err, "failed to post on the service", "service", "dummy-service")
+				// Use cachedData as needed.
+				_ = cachedData
 			} else {
-				klog.Infof("post on the service", "service", "dummy-service", "out", string(postOut))
+				// Read the file data from disk.
+				fileData, err := os.ReadFile(checkpointPath)
+				if err != nil {
+					klog.ErrorS(err, "failed to read file data", "file", checkpointPath)
+					return
+				}
+
+				// Store the file data in the cache.
+				err = fileCache.Set([]byte(cacheKey), fileData, 0)
+				if err != nil {
+					klog.ErrorS(err, "failed to cache file data", "file", checkpointPath)
+					return
+				}
+
+				// Perform the upload with the file data.
+				postCmd := exec.Command("curl", "-X", "POST", "-F", fmt.Sprintf("file=@%s", checkpointPath), fmt.Sprintf("http://%s:%d/upload", dummyIp, dummyPort))
+				klog.Infof("post command", "cmd", postCmd.String())
+				postOut, err := postCmd.CombinedOutput()
+				if err != nil {
+					klog.ErrorS(err, "failed to post on the service", "service", "dummy-service")
+				} else {
+					klog.Infof("post on the service", "service", "dummy-service", "out", string(postOut))
+				}
 			}
 		}(entry)
 	}
