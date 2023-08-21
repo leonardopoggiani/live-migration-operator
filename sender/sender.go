@@ -22,76 +22,10 @@ import (
 	"k8s.io/client-go/tools/clientcmd"
 )
 
-func deletePodsStartingWithTest(ctx context.Context, clientset *kubernetes.Clientset) error {
-	podList, err := clientset.CoreV1().Pods("").List(ctx, metav1.ListOptions{})
-	if err != nil {
-		return err
-	}
-
-	for _, pod := range podList.Items {
-		if pod.ObjectMeta.Name[:5] == "test-" {
-			err := clientset.CoreV1().Pods(pod.Namespace).Delete(ctx, pod.Name, metav1.DeleteOptions{})
-			if err != nil {
-				return err
-			}
-			fmt.Printf("Deleted pod %s\n", pod.Name)
-		}
-	}
-
-	return nil
-}
-
 func CreateContainers(ctx context.Context, numContainers int, clientset *kubernetes.Clientset, reconciler migrationoperator.LiveMigrationReconciler) *v1.Pod {
-	// Generate a random string
-	r := rand.New(rand.NewSource(time.Now().UnixNano()))
-	randStr := fmt.Sprintf("%d", r.Int())
+	randStr := generateRandomString()
 
-	createContainers := []v1.Container{}
-	fmt.Println("numContainers: " + fmt.Sprintf("%d", numContainers))
-	// Add the specified number of containers to the Pod manifest
-	for i := 0; i < numContainers; i++ {
-		fmt.Println("Creating container: " + fmt.Sprintf("container%d", i))
-		docker_image := ""
-
-		if i == 0 {
-			// Create the first container with the migration sender
-			docker_image = "docker.io/library/tomcat:latest"
-		} else if i == 1 {
-			docker_image = "docker.io/library/nginx:latest"
-		} else if i == 2 {
-			docker_image = "docker.io/library/redis:latest"
-		} else if i == 3 {
-			docker_image = "docker.io/library/rabbitmq:latest"
-		} else if i == 4 {
-			docker_image = "docker.io/library/memcached:latest"
-		} else if i == 5 {
-			docker_image = "docker.io/library/mariadb:latest"
-		} else if i == 6 {
-			docker_image = "docker.io/library/postgres:latest"
-		} else if i == 7 {
-			docker_image = "docker.io/library/mongo:latest"
-		} else if i == 8 {
-			docker_image = "docker.io/library/wordpress:latest"
-		} else if i == 9 {
-			docker_image = "docker.io/library/drupal:latest"
-		} else {
-			docker_image = "docker.io/library/joomla:latest"
-		}
-
-		container := v1.Container{
-			Name:            fmt.Sprintf("container%d", i),
-			Image:           docker_image,
-			ImagePullPolicy: v1.PullPolicy("IfNotPresent"),
-			Ports: []v1.ContainerPort{
-				{
-					ContainerPort: 8080,
-					Protocol:      v1.Protocol("TCP"),
-				},
-			},
-		}
-
-		createContainers = append(createContainers, container)
-	}
+	createContainers := generateContainers(numContainers)
 
 	// Create the Pod with the random string appended to the name
 	pod, err := clientset.CoreV1().Pods("default").Create(ctx, &v1.Pod{
@@ -110,20 +44,61 @@ func CreateContainers(ctx context.Context, numContainers int, clientset *kuberne
 	if err != nil {
 		fmt.Println(err.Error())
 		return nil
-	} else {
-		fmt.Printf("Pod created %s", pod.Name)
-		fmt.Println(createContainers[0].Name)
 	}
+
+	fmt.Printf("Pod created %s", pod.Name)
+	fmt.Println(createContainers[0].Name)
 
 	err = reconciler.WaitForContainerReady(pod.Name, "default", createContainers[0].Name, clientset)
 	if err != nil {
 		fmt.Println(err.Error())
 		return nil
-	} else {
-		fmt.Println("Container ready")
 	}
 
+	fmt.Println("Container ready")
 	return pod
+}
+
+func generateRandomString() string {
+	r := rand.New(rand.NewSource(time.Now().UnixNano()))
+	return fmt.Sprintf("%d", r.Int())
+}
+
+func generateContainers(numContainers int) []v1.Container {
+	var dockerImages = []string{
+		"docker.io/library/tomcat:latest",
+		"docker.io/library/nginx:latest",
+		"docker.io/library/redis:latest",
+		"docker.io/library/rabbitmq:latest",
+		"docker.io/library/memcached:latest",
+		"docker.io/library/mariadb:latest",
+		"docker.io/library/postgres:latest",
+		"docker.io/library/mongo:latest",
+		"docker.io/library/wordpress:latest",
+		"docker.io/library/drupal:latest",
+		"docker.io/library/joomla:latest",
+	}
+
+	var createContainers []v1.Container
+	for i := 0; i < numContainers; i++ {
+		imageIndex := i
+		if i >= len(dockerImages) {
+			imageIndex = len(dockerImages) - 1
+		}
+		container := v1.Container{
+			Name:            fmt.Sprintf("container%d", i),
+			Image:           dockerImages[imageIndex],
+			ImagePullPolicy: v1.PullPolicy("IfNotPresent"),
+			Ports: []v1.ContainerPort{
+				{
+					ContainerPort: 8080,
+					Protocol:      v1.Protocol("TCP"),
+				},
+			},
+		}
+		createContainers = append(createContainers, container)
+	}
+	return createContainers
 }
 
 func waitForServiceCreation(clientset *kubernetes.Clientset, ctx context.Context) {
@@ -183,32 +158,78 @@ func waitUntilSuccess(url string, data string, timeout time.Duration) error {
 	}
 }
 
-func main() {
-	fmt.Println("Sender program, sending migration request")
-	runtime.GOMAXPROCS(runtime.NumCPU())
-
-	// Connect to the SQLite database
-	db, err := sql.Open("sqlite3", "performance.db")
+func deletePodsStartingWithTest(ctx context.Context, clientset *kubernetes.Clientset) {
+	podList, err := clientset.CoreV1().Pods("").List(ctx, metav1.ListOptions{})
 	if err != nil {
-		fmt.Println(err.Error())
-	}
-	defer db.Close()
-
-	// Create the time_measurements table if it doesn't exist
-	_, err = db.Exec(`
-		CREATE TABLE IF NOT EXISTS time_measurements (
-			id INTEGER PRIMARY KEY AUTOINCREMENT,
-			mode TEXT,
-			start_time TIMESTAMP,
-			end_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-			elapsed_time INTEGER
-		)
-	`)
-	if err != nil {
-		fmt.Println(err.Error())
+		fmt.Println("Error listing pods")
+		os.Exit(1)
 	}
 
-	// Load Kubernetes config
+	for _, pod := range podList.Items {
+		if pod.ObjectMeta.Name[:5] == "test-" {
+			err := clientset.CoreV1().Pods(pod.Namespace).Delete(ctx, pod.Name, metav1.DeleteOptions{})
+			if err != nil {
+				fmt.Println("Error deleting pod")
+				os.Exit(1)
+			}
+			fmt.Printf("Deleted pod %s\n", pod.Name)
+		}
+	}
+}
+
+func getContainers(ctx context.Context, clientset *kubernetes.Clientset) []migrationoperator.Container {
+	// Create a slice of Container structs
+	var containers []migrationoperator.Container
+
+	// Append the container ID and name for each container in each pod
+	pods, err := clientset.CoreV1().Pods("default").List(ctx, metav1.ListOptions{})
+	if err != nil {
+		fmt.Println(err.Error())
+		return nil
+	}
+
+	for _, pod := range pods.Items {
+		for _, containerStatus := range pod.Status.ContainerStatuses {
+			idParts := strings.Split(containerStatus.ContainerID, "//")
+
+			if len(idParts) < 2 {
+				fmt.Println("Malformed container ID")
+				return nil
+			}
+			containerID := idParts[1]
+
+			container := migrationoperator.Container{
+				ID:   containerID,
+				Name: containerStatus.Name,
+			}
+			containers = append(containers, container)
+		}
+
+		fmt.Println("pod.Name: " + pod.Name)
+	}
+
+	return containers
+}
+
+func deleteDirectory(directory string) {
+	if _, err := exec.Command("sudo", "rm", "-rf", directory+"/").Output(); err != nil {
+		fmt.Println(err.Error())
+		os.Exit(1)
+	}
+
+	fmt.Println("Checkpoints folder deleted")
+}
+
+func createDirectory(directory string) {
+	if _, err := exec.Command("sudo", "mkdir", directory).Output(); err != nil {
+		fmt.Println(err.Error())
+		os.Exit(1)
+	}
+
+	fmt.Println("Checkpoints folder created")
+}
+
+func createKubernetesClient() *kubernetes.Clientset {
 	kubeconfigPath := os.Getenv("KUBECONFIG")
 	if kubeconfigPath == "" {
 		kubeconfigPath = "~/.kube/config"
@@ -217,31 +238,40 @@ func main() {
 	kubeconfigPath = os.ExpandEnv(kubeconfigPath)
 	if _, err := os.Stat(kubeconfigPath); os.IsNotExist(err) {
 		fmt.Println("Kubeconfig file not found")
-		return
+		os.Exit(1)
 	}
 
 	kubeconfig, err := clientcmd.BuildConfigFromFlags("", kubeconfigPath)
 	if err != nil {
 		fmt.Println("Error loading kubeconfig")
-		return
+		os.Exit(1)
 	}
 
-	// Create Kubernetes API client
 	clientset, err := kubernetes.NewForConfig(kubeconfig)
 	if err != nil {
 		fmt.Println("Error creating kubernetes client")
-		return
+		os.Exit(1)
 	}
 
+	return clientset
+}
+
+func main() {
+	fmt.Println("Sender program, sending migration request")
+	runtime.GOMAXPROCS(runtime.NumCPU())
+
+	// Connect to the SQLite database
+	db := openDatabase()
+	defer db.Close()
+
+	createTableIfNotExists(db)
+
+	clientset := createKubernetesClient()
 	ctx := context.Background()
 
-	deletePodsStartingWithTest(ctx, clientset)
-	waitForServiceCreation(clientset, ctx)
+	deletePodsAndWaitForService(ctx, clientset)
 
 	reconciler := migrationoperator.LiveMigrationReconciler{}
-
-	// Once created the dummy pod and correctly offloaded, I can create a pod to migrate
-	// numContainers := []int{1, 2, 3, 4, 5}
 
 	repetitions := 10
 	numContainers := []int{1}
@@ -252,153 +282,148 @@ func main() {
 		for j := 0; j < repetitions; j++ {
 			fmt.Printf("Iteration %d\n", j+1)
 
-			pod := CreateContainers(ctx, numContainer, clientset, reconciler)
+			pod := createAndCheckpointPod(ctx, numContainer, clientset, reconciler, db)
 			if pod == nil {
 				fmt.Println("Error creating pod")
 				return
 			}
 
-			// Create a slice of Container structs
-			var containers []migrationoperator.Container
-
-			// Append the container ID and name for each container in each pod
-			pods, err := clientset.CoreV1().Pods("default").List(ctx, metav1.ListOptions{})
-			if err != nil {
-				fmt.Println(err.Error())
-				return
-			}
-
-			for _, pod := range pods.Items {
-				for _, containerStatus := range pod.Status.ContainerStatuses {
-					idParts := strings.Split(containerStatus.ContainerID, "//")
-
-					if len(idParts) < 2 {
-						fmt.Println("Malformed container ID")
-						return
-					}
-					containerID := idParts[1]
-
-					container := migrationoperator.Container{
-						ID:   containerID,
-						Name: containerStatus.Name,
-					}
-					containers = append(containers, container)
-				}
-			}
-
-			fmt.Println("pod.Name: " + pod.Name)
-
-			start := time.Now()
-
-			err = reconciler.CheckpointPodCrio(containers, "default", pod.Name)
-			if err != nil {
-				fmt.Println(err.Error())
-				return
-			} else {
-				fmt.Println("Checkpointing completed")
-			}
-
-			elapsedCheckpoint := time.Since(start)
-			fmt.Printf("[MEASURE] Checkpointing took %d\n", elapsedCheckpoint.Milliseconds())
-
-			// Insert the time measurement into the database
-			_, err = db.Exec("INSERT INTO time_measurements (mode, start_time, end_time, elapsed_time) VALUES (?, ?, ?, ?)", "sequential_checkpoint", start, time.Now(), elapsedCheckpoint.Milliseconds())
-			if err != nil {
-				fmt.Println("Insert failed")
-				fmt.Println(err.Error())
-			}
-
-			err = reconciler.TerminateCheckpointedPod(ctx, pod.Name, clientset)
-			if err != nil {
-				fmt.Println("Terminate checkpointed pod failed")
-				fmt.Println(err.Error())
-				return
-			} else {
-				fmt.Println("Pod terminated")
-			}
-
-			directory := "/tmp/checkpoints/checkpoints/"
-
-			files, err := os.ReadDir(directory)
-			if err != nil {
-				fmt.Println("Reading directory failed")
-				fmt.Printf("Error reading directory: %v\n", err)
-				return
-			}
-
-			for _, file := range files {
-				if file.IsDir() {
-					fmt.Printf("Directory: %s\n", file.Name())
-				}
-			}
-
-			startMigration := time.Now()
-
-			err = reconciler.MigrateCheckpoint(ctx, directory, clientset)
-			if err != nil {
-				fmt.Println("Migration failed")
-				fmt.Println(err.Error())
-				return
-			}
-
-			// send a dummy file at the end to signal the end of the migration
-			createDummyFile := exec.Command("sudo", "touch", "/tmp/checkpoints/checkpoints/dummy")
-			_, err = createDummyFile.Output()
-			if err != nil {
-				fmt.Println("Dummy create failed")
-				fmt.Println(err.Error())
-				return
-			}
-
-			dummyPath := "/tmp/checkpoints/checkpoints/dummy"
-
-			dummyIp, dummyPort := reconciler.GetDummyServiceIPAndPort(clientset, ctx)
-
-			err = waitUntilSuccess(fmt.Sprintf("http://%s:%d/upload", dummyIp, dummyPort), "{}", 1000)
-			if err != nil {
-				fmt.Println("Timeout reached")
-				fmt.Println(err.Error())
-				return
-			} else {
-				fmt.Println("Post success")
-			}
-
-			postCmd := exec.Command("curl", "-X", "POST", "-F", fmt.Sprintf("file=@%s", dummyPath), fmt.Sprintf("http://%s:%d/upload", dummyIp, dummyPort))
-			fmt.Println("post command", "cmd", postCmd.String())
-			postOut, err := postCmd.CombinedOutput()
-			if err != nil {
-				fmt.Println("Post failed")
-				fmt.Println(err.Error())
-				return
-			} else {
-				fmt.Println("post on the service", "service", "dummy-service", "out", string(postOut))
-			}
-
-			// Insert the measured time into the database
-			elapsedMigration := time.Since(startMigration)
-			elapsed := time.Since(start)
-
-			fmt.Printf("[MEASURE] Migration took %d from beginning\n", elapsed.Milliseconds())
-			fmt.Printf("[MEASURE] Migration took %d\n", elapsedMigration.Milliseconds())
-
-			_, err = db.Exec("INSERT INTO time_measurements (mode, start_time, end_time, elapsed_time) VALUES (?, ?, ?, ?)", "proposed_migration", startMigration, time.Now(), elapsedMigration.Milliseconds())
-			if err != nil {
-				fmt.Println("Failed to insert time measurement:", err)
-			}
-
-			// delete checkpoints folder
-			if _, err := exec.Command("sudo", "rm", "-rf", directory+"/").Output(); err != nil {
-				fmt.Println("Delete checkpoints failed")
-				fmt.Println(err.Error())
-				return
-			}
-
-			if _, err = exec.Command("sudo", "mkdir", "/tmp/checkpoints/checkpoints/").Output(); err != nil {
-				fmt.Println(err.Error())
-				return
-			}
+			migrateAndCleanup(ctx, pod, reconciler, clientset, db)
 
 			time.Sleep(30 * time.Second)
 		}
 	}
+}
+
+func openDatabase() *sql.DB {
+	db, err := sql.Open("sqlite3", "performance.db")
+	if err != nil {
+		fmt.Println(err.Error())
+	}
+	return db
+}
+
+func createTableIfNotExists(db *sql.DB) {
+	_, err := db.Exec(`
+        CREATE TABLE IF NOT EXISTS time_measurements (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            mode TEXT,
+            start_time TIMESTAMP,
+            end_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            elapsed_time INTEGER
+        )
+    `)
+	if err != nil {
+		fmt.Println(err.Error())
+	}
+}
+
+func deletePodsAndWaitForService(ctx context.Context, clientset *kubernetes.Clientset) {
+	deletePodsStartingWithTest(ctx, clientset)
+	waitForServiceCreation(clientset, ctx)
+}
+
+func createAndCheckpointPod(ctx context.Context, numContainer int, clientset *kubernetes.Clientset, reconciler migrationoperator.LiveMigrationReconciler, db *sql.DB) *v1.Pod {
+	fmt.Printf("Number of Containers: %d\n", numContainer)
+
+	pod := CreateContainers(ctx, numContainer, clientset, reconciler)
+	if pod == nil {
+		fmt.Println("Error creating pod")
+		return nil
+	}
+
+	containers := getContainers(ctx, clientset)
+	start := time.Now()
+
+	err := reconciler.CheckpointPodCrio(containers, "default", pod.Name)
+	if err != nil {
+		fmt.Println(err.Error())
+		return nil
+	} else {
+		fmt.Println("Checkpointing completed")
+	}
+
+	elapsedCheckpoint := time.Since(start)
+	fmt.Printf("[MEASURE] Checkpointing took %d\n", elapsedCheckpoint.Milliseconds())
+
+	// Insert the time measurement into the database
+	db.Exec("INSERT INTO time_measurements (mode, start_time, end_time, elapsed_time) VALUES (?, ?, ?, ?)", "sequential_checkpoint", start, time.Now(), elapsedCheckpoint.Milliseconds())
+	if err != nil {
+		fmt.Println("Insert failed")
+		fmt.Println(err.Error())
+	}
+
+	return pod
+}
+
+func migrateAndCleanup(ctx context.Context, pod *v1.Pod, reconciler migrationoperator.LiveMigrationReconciler, clientset *kubernetes.Clientset, db *sql.DB) {
+	directory := "/tmp/checkpoints/checkpoints/"
+
+	files, err := os.ReadDir(directory)
+	if err != nil {
+		fmt.Println("Reading directory failed")
+		fmt.Printf("Error reading directory: %v\n", err)
+		return
+	}
+
+	for _, file := range files {
+		if file.IsDir() {
+			fmt.Printf("Directory: %s\n", file.Name())
+		}
+	}
+
+	startMigration := time.Now()
+
+	err = reconciler.MigrateCheckpoint(ctx, directory, clientset)
+	if err != nil {
+		fmt.Println("Migration failed")
+		fmt.Println(err.Error())
+		return
+	}
+
+	// send a dummy file at the end to signal the end of the migration
+	createDummyFile := exec.Command("sudo", "touch", "/tmp/checkpoints/checkpoints/dummy")
+	_, err = createDummyFile.Output()
+	if err != nil {
+		fmt.Println("Dummy create failed")
+		fmt.Println(err.Error())
+		return
+	}
+
+	dummyPath := "/tmp/checkpoints/checkpoints/dummy"
+
+	dummyIp, dummyPort := reconciler.GetDummyServiceIPAndPort(clientset, ctx)
+
+	err = waitUntilSuccess(fmt.Sprintf("http://%s:%d/upload", dummyIp, dummyPort), "{}", 1000)
+	if err != nil {
+		fmt.Println("Timeout reached")
+		fmt.Println(err.Error())
+		return
+	} else {
+		fmt.Println("Post success")
+	}
+
+	postCmd := exec.Command("curl", "-X", "POST", "-F", fmt.Sprintf("file=@%s", dummyPath), fmt.Sprintf("http://%s:%d/upload", dummyIp, dummyPort))
+	fmt.Println("post command", "cmd", postCmd.String())
+	postOut, err := postCmd.CombinedOutput()
+	if err != nil {
+		fmt.Println("Post failed")
+		fmt.Println(err.Error())
+		return
+	} else {
+		fmt.Println("post on the service", "service", "dummy-service", "out", string(postOut))
+	}
+
+	// Insert the measured time into the database
+	elapsedMigration := time.Since(startMigration)
+
+	fmt.Printf("[MEASURE] Migration took %d\n", elapsedMigration.Milliseconds())
+
+	db.Exec("INSERT INTO time_measurements (mode, start_time, end_time, elapsed_time) VALUES (?, ?, ?, ?)", "proposed_migration", startMigration, time.Now(), elapsedMigration.Milliseconds())
+
+	// delete checkpoints folder
+	deleteDirectory(directory + "/")
+	createDirectory("/tmp/checkpoints/checkpoints/")
+
+	time.Sleep(30 * time.Second)
 }
