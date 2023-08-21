@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"k8s.io/apimachinery/pkg/api/resource"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -747,6 +748,7 @@ func (r *LiveMigrationReconciler) MigratePodPipelined(ctx context.Context, clien
 
 func (r *LiveMigrationReconciler) CreateDummyPod(clientset *kubernetes.Clientset, ctx context.Context) error {
 	_, err := clientset.CoreV1().Pods("liqo-demo").Get(ctx, "dummy-pod", metav1.GetOptions{})
+
 	if err != nil {
 		klog.ErrorS(err, "failed to get dummy pod")
 
@@ -772,6 +774,16 @@ func (r *LiveMigrationReconciler) CreateDummyPod(clientset *kubernetes.Clientset
 							{
 								Name:      "checkpoint-files",
 								MountPath: "/mnt/data",
+							},
+						},
+						Resources: corev1.ResourceRequirements{
+							Requests: corev1.ResourceList{
+								corev1.ResourceCPU:    resource.MustParse("100m"),  // 100 milliCPU (0.1 CPU)
+								corev1.ResourceMemory: resource.MustParse("128Mi"), // 128 Mebibytes
+							},
+							Limits: corev1.ResourceList{
+								corev1.ResourceCPU:    resource.MustParse("250m"),  // 250 milliCPU (0.25 CPU)
+								corev1.ResourceMemory: resource.MustParse("256Mi"), // 256 Mebibytes
 							},
 						},
 					},
