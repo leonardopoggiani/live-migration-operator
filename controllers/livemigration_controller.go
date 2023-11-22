@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"k8s.io/apimachinery/pkg/api/resource"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -13,6 +12,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"k8s.io/apimachinery/pkg/api/resource"
 
 	"github.com/coocood/freecache"
 	"github.com/fsnotify/fsnotify"
@@ -1163,43 +1164,6 @@ func getFiles(path string) []os.DirEntry {
 	}
 	return files
 }
-
-/*
-// Change file permissions
-
-	if err := os.Chmod(checkpointPath, 0777); err != nil {
-		klog.ErrorS(err, "failed to change permissions of checkpoint file", "checkpointPath", checkpointPath)
-		return nil, "", err
-	}
-
-// Create a new container
-newContainerCmd := exec.Command("sudo", "buildah", "from", "scratch")
-newContainerOutput, err := newContainerCmd.Output()
-
-	if err != nil {
-		klog.ErrorS(err, "failed to create new container", "containerID", newContainerOutput)
-		return nil, "", err
-	}
-
-newContainerOutput = bytes.TrimRight(newContainerOutput, "\n") // remove trailing newline
-newContainer := string(newContainerOutput)
-
-klog.Infof("", "new container name", newContainer)
-
-// Add the checkpoint file to the new container
-addCheckpointCmd := exec.Command("sudo", "buildah", "add", newContainer, checkpointPath, "/")
-klog.Infof(addCheckpointCmd.String())
-
-out, err := addCheckpointCmd.CombinedOutput()
-
-	if err != nil {
-		klog.ErrorS(err, "failed to add checkpoint to container")
-		return nil, "", err
-	} else {
-
-		klog.Infof("Checkpoint added to container", string(out))
-	}
-*/
 
 func processFile(file os.DirEntry, path string) ([]corev1.Container, string, error) {
 	// Check if file is a dummy file
