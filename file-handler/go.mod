@@ -1,6 +1,6 @@
 module github.com/leonardopoggiani/file-handler
 
-go 1.23
+go 1.21
 
 require k8s.io/klog/v2 v2.110.1
 
