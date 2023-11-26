@@ -4,9 +4,10 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"net/http"
+
 	"github.com/leonardopoggiani/live-migration-operator/api-server/endpoints"
 	"k8s.io/klog/v2"
-	"net/http"
 
 	"github.com/emicklei/go-restful/v3"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -80,7 +81,7 @@ func (as *apiServer) Start(stop <-chan struct{}) error {
 		if err != nil {
 			switch err {
 			case http.ErrServerClosed:
-				klog.Infof("Shutting down api-server")
+				klog.Info("Shutting down api-server")
 			default:
 				log.Error(err, "Could not start an HTTP Server")
 				errChan <- err
