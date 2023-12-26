@@ -11,7 +11,7 @@ func (r *LiveMigrationReconciler) CheckpointPodCrio(containers []types.Container
 	// curl -sk -X POST "https://localhost:10250/checkpoint/liqo-demo/tomcat-pod/tomcat"
 
 	for _, container := range containers {
-		klog.Info("", "checkpointing container", "container", container.Name)
+		klog.Info("[INFO]", "checkpointing container", "container", container.Name)
 
 		curlPath := "https://localhost:10250/checkpoint/" + namespace + "/" + podName + "/" + container.Name
 		checkpointCmd := exec.Command("curl", "-sk", "-XPOST", curlPath)

@@ -41,7 +41,12 @@ var fileCache = freecache.NewCache(cacheSize)
 //+kubebuilder:rbac:groups=livemigration.liqo.io,resources=livemigrations/finalizers,verbs=update
 
 func (r *LiveMigrationReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	klog.Infof("Reconciling LiveMigration %s", req.Name)
+	klog.Info("[INFO]", "Reconciling LiveMigration %s", req.Name)
+
+	namespace := os.Getenv("NAMESPACE")
+	if namespace == "" {
+		namespace = "test"
+	}
 
 	// Load Kubernetes config
 	kubeconfigPath := os.Getenv("KUBECONFIG")
@@ -76,7 +81,7 @@ func (r *LiveMigrationReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 	var template *corev1.PodTemplateSpec
 	var annotations map[string]string
 
-	klog.Info("migratingPod.Spec.SourcePod ", migratingPod.Spec.SourcePod, "migratingPod.Spec.DestHost ", migratingPod.Spec.DestHost)
+	klog.Info("[INFO]", "migratingPod.Spec.SourcePod %s, destHost %s", migratingPod.Spec.SourcePod, migratingPod.Spec.DestHost)
 
 	if migratingPod.Spec.Template.ObjectMeta.Name != "" {
 		_ = &migratingPod.Spec.Template
@@ -87,7 +92,7 @@ func (r *LiveMigrationReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 			if err != nil {
 				klog.ErrorS(err, "failed to create dummy pod")
 			} else {
-				klog.Info("dummy pod created")
+				klog.Info("[INFO]", "dummy pod created")
 			}
 
 			err = dummy.CreateDummyService(clientset, ctx)
@@ -150,7 +155,7 @@ func (r *LiveMigrationReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 			select {
 			case event := <-watcher.Events:
 				if event.Op&fsnotify.Create == fsnotify.Create {
-					klog.Infof("Event: %s", event.String())
+					klog.Info("[INFO]", "Event: %s", event.String())
 
 					if strings.Contains(event.Name, "/checkpoints/") && strings.Contains(event.Name, "dummy") {
 						// restoredPod, err := r.buildahRestore(ctx, "/checkpoints/")
@@ -159,14 +164,14 @@ func (r *LiveMigrationReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 						if err != nil {
 							klog.ErrorS(err, "failed to restore pod")
 						} else {
-							klog.Info("restore result ", restoredPod.Status)
+							klog.Info("[INFO]", "restore result %s", restoredPod.Status)
 						}
 					}
 				}
 			case err := <-watcher.Errors:
 				klog.ErrorS(err, "failed to watch file")
 			case <-ctx.Done():
-				klog.Info("stop checking for sourcePod")
+				klog.Info("[INFO]", "stop checking for sourcePod")
 				return
 			}
 		}
@@ -176,7 +181,7 @@ func (r *LiveMigrationReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 	if err != nil {
 		klog.ErrorS(err, "failed to add watcher")
 	} else {
-		klog.Info("watcher added")
+		klog.Info("[INFO]", "watcher added")
 	}
 
 	// Start a goroutine to check for the sourcePod in a loop
@@ -184,7 +189,7 @@ func (r *LiveMigrationReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 		for {
 			select {
 			case <-ctx.Done():
-				klog.Info("stop checking for sourcePod")
+				klog.Info("[INFO]", "stop checking for sourcePod")
 				return
 			default:
 				sourcePod, err := utils.CheckPodExist(clientset, annotations["sourcePod"])
@@ -193,7 +198,7 @@ func (r *LiveMigrationReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 					return
 				}
 				if sourcePod != nil {
-					_, err := r.MigratePodPipelined(ctx, clientset, &migratingPod)
+					_, err := r.MigratePodPipelined(ctx, clientset, &migratingPod, namespace)
 					// _, err = r.migratePod(ctx, clientset, &migratingPod)
 					if err != nil {
 						klog.ErrorS(err, "failed to migrate pod", "pod", sourcePod.Name)
@@ -201,7 +206,7 @@ func (r *LiveMigrationReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 					}
 					return
 				} else {
-					klog.Info("sourcePod not found yet, wait and retry..")
+					klog.Info("[INFO]", "sourcePod not found yet, wait and retry..")
 					time.Sleep(5 * time.Second)
 				}
 			}
@@ -276,7 +281,7 @@ func processFile(file os.DirEntry, path string) ([]corev1.Container, string, err
 
 	// Get the path to the checkpoint file
 	checkpointPath := filepath.Join(path, file.Name())
-	klog.Infof("checkpointPath: %s", checkpointPath)
+	klog.Info("[INFO]", "checkpointPath: %s", checkpointPath)
 
 	containerName := utils.RetrieveContainerName(checkpointPath)
 	podName := utils.RetrievePodName(checkpointPath)
@@ -306,7 +311,7 @@ func processFile(file os.DirEntry, path string) ([]corev1.Container, string, err
 		newContainerOutput = bytes.TrimRight(newContainerOutput, "\n") // remove trailing newline
 		newContainer = string(newContainerOutput)
 
-		klog.Info("", "new container name", newContainer)
+		klog.Info("[INFO]", "new container name", newContainer)
 
 		addCheckpointCmd := exec.Command("sudo", "buildah", "add", newContainer, checkpointPath, "/")
 
@@ -319,7 +324,7 @@ func processFile(file os.DirEntry, path string) ([]corev1.Container, string, err
 
 		// Add an annotation to the container with the checkpoint name
 		annotation := "--annotation=io.kubernetes.cri-o.annotations.checkpoint.name=" + containerName
-		klog.Info("", "annotation", annotation)
+		klog.Info("[INFO]", "annotation", annotation)
 
 		configCheckpointCmd := exec.Command("sudo", "buildah", "config", annotation, newContainer)
 
@@ -329,12 +334,12 @@ func processFile(file os.DirEntry, path string) ([]corev1.Container, string, err
 			results <- "failed to add checkpoint to container"
 			return
 		} else {
-			klog.Info("Checkpoint added to container", string(out))
+			klog.Info("[INFO]", "Checkpoint added to container %s", string(out))
 		}
 
 		go func() {
 			localCheckpointPath := "leonardopoggiani/checkpoint-images:" + containerName
-			klog.Info("", "localCheckpointPath", localCheckpointPath)
+			klog.Info("[INFO]", "localCheckpointPath", localCheckpointPath)
 
 			commitCheckpointCmd := exec.Command("sudo", "buildah", "commit", newContainer, localCheckpointPath)
 
@@ -344,7 +349,7 @@ func processFile(file os.DirEntry, path string) ([]corev1.Container, string, err
 				results <- "failed to commit checkpoint"
 				return
 			} else {
-				klog.Info("Checkpoint committed", string(out))
+				klog.Info("[INFO]", "Checkpoint committed %s", string(out))
 			}
 
 			removeContainerCmd := exec.Command("sudo", "buildah", "rm", newContainer)
@@ -352,7 +357,7 @@ func processFile(file os.DirEntry, path string) ([]corev1.Container, string, err
 			out, err = removeContainerCmd.CombinedOutput()
 			if err != nil {
 				klog.ErrorS(err, "failed to remove container")
-				klog.Infof("out: %s", out)
+				klog.Info("[INFO]", "out: %s", out)
 			}
 		}()
 

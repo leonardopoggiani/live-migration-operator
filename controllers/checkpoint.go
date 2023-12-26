@@ -11,33 +11,33 @@ import (
 	"k8s.io/klog/v2"
 )
 
-func (r *LiveMigrationReconciler) TerminateCheckpointedPod(ctx context.Context, podName string, clientset *kubernetes.Clientset) error {
+func (r *LiveMigrationReconciler) TerminateCheckpointedPod(ctx context.Context, podName string, clientset *kubernetes.Clientset, namespace string) error {
 	// get the pod by name
-	klog.Info("", "Terminating pod ", podName)
+	klog.Info("[INFO]", "Terminating pod ", podName)
 
-	pod, err := clientset.CoreV1().Pods("default").Get(context.Background(), podName, metav1.GetOptions{})
+	pod, err := clientset.CoreV1().Pods(namespace).Get(context.Background(), podName, metav1.GetOptions{})
 	if err != nil {
 		klog.ErrorS(err, "unable to get pod ", pod.Name)
 	} else {
-		klog.Info("pod ", podName)
+		klog.Info("[INFO]", "pod ", podName)
 	}
 
 	// delete the pod
-	err = clientset.CoreV1().Pods("default").Delete(context.Background(), podName, metav1.DeleteOptions{})
+	err = clientset.CoreV1().Pods(namespace).Delete(context.Background(), podName, metav1.DeleteOptions{})
 	if err != nil {
 		klog.ErrorS(err, "unable to delete pod", pod.Name)
 	} else {
-		klog.Info("pod deleted ", podName)
+		klog.Info("[INFO]", "pod deleted ", podName)
 	}
 
-	err = utils.WaitForPodDeletion(ctx, podName, "default", clientset)
+	err = utils.WaitForPodDeletion(ctx, podName, namespace, clientset)
 	if err != nil {
 		klog.ErrorS(err, "unable to finish delete pod", "pod", pod.Name)
 	} else {
-		klog.Info("pod deletetion completed ", podName)
+		klog.Info("[INFO]", "pod deletetion completed ", podName)
 	}
 
-	klog.Info("Pod terminated ", podName)
+	klog.Info("[INFO]", "Pod terminated ", podName)
 	return nil
 }
 
