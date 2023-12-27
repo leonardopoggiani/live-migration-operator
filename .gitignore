@@ -39,3 +39,7 @@ logs/
 config/samples/
 config/samples/*
 /vendor/
+
+!.gitignore
+!.github/**
+.git*
