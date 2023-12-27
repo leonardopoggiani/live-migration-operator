@@ -26,16 +26,16 @@ func (r *LiveMigrationReconciler) MigrateCheckpoint(ctx context.Context, directo
 		klog.ErrorS(err, "failed to read dir", "dir", directory)
 		return err
 	} else {
-		klog.Info("[INFO]", "files in dir: %s", files)
+		klog.Info("[INFO] ", "files in dir: ", files)
 	}
 
 	dummyIp, dummyPort := dummy.GetDummyServiceIPAndPort(clientset, ctx)
-	klog.Info("[INFO]", "dummyIp: %s, port: %s", dummyIp, dummyPort)
+	klog.Info("[INFO] ", "dummyIp: ", dummyIp, "port: ", dummyPort)
 
 	for _, file := range files {
 
 		checkpointPath := filepath.Join(directory, file.Name())
-		klog.Info("[INFO]", "checkpointPath: %s", checkpointPath)
+		klog.Info("[INFO] ", "checkpointPath: ", checkpointPath)
 
 		// change permissions of checkpoint file
 		// sudo chmod +r /tmp/checkpoints/checkpoints/checkpoint-tomcat-pod_liqo-demo-tomcat-2023-04-18T09:39:13Z.tar
@@ -44,16 +44,16 @@ func (r *LiveMigrationReconciler) MigrateCheckpoint(ctx context.Context, directo
 		if err != nil {
 			klog.ErrorS(err, "failed to change permissions of checkpoint file", "checkpointPath", checkpointPath)
 		} else {
-			klog.Info("[INFO]", "checkpoint file permissions changed: %s", chmodOutput)
+			klog.Info("[INFO] ", "checkpoint file permissions changed: ", chmodOutput)
 		}
 
 		postCmd := exec.Command("curl", "-X", "POST", "-F", fmt.Sprintf("file=@%s", checkpointPath), fmt.Sprintf("http://%s:%d/upload", dummyIp, dummyPort))
-		klog.Info("[INFO]", "cmd", postCmd.String())
+		klog.Info("[INFO] ", "cmd", postCmd.String())
 		postOut, err := postCmd.CombinedOutput()
 		if err != nil {
 			klog.ErrorS(err, "failed to post on the service", "service", "dummy-service")
 		} else {
-			klog.Info("[INFO]", "service", "dummy-service", "out", string(postOut))
+			klog.Info("[INFO] ", "service", "dummy-service", "out", string(postOut))
 		}
 	}
 
@@ -103,7 +103,7 @@ func (r *LiveMigrationReconciler) MigrateCheckpointParallelized(ctx context.Cont
 			cacheKey := checkpointPath
 			cachedData, err := fileCache.Get([]byte(cacheKey))
 			if err == nil {
-				klog.Infof("[INFO]", "Found file data in cache for: %s", checkpointPath)
+				klog.Info("[INFO] ", "Found file data in cache for: ", checkpointPath)
 
 				// Use cachedData as needed.
 				_ = cachedData
@@ -124,12 +124,12 @@ func (r *LiveMigrationReconciler) MigrateCheckpointParallelized(ctx context.Cont
 
 				// Perform the upload with the file data.
 				postCmd := exec.Command("curl", "-X", "POST", "-F", fmt.Sprintf("file=@%s", checkpointPath), fmt.Sprintf("http://%s:%d/upload", dummyIp, dummyPort))
-				klog.Info("[INFO]", "cmd", postCmd.String())
+				klog.Info("[INFO] ", "cmd", postCmd.String())
 				postOut, err := postCmd.CombinedOutput()
 				if err != nil {
 					klog.ErrorS(err, "failed to post on the service", "service", "dummy-service")
 				} else {
-					klog.Info("[INFO]", "service", "dummy-service", "out", string(postOut))
+					klog.Info("[INFO] ", "service", "dummy-service", "out", string(postOut))
 				}
 			}
 		}(entry)
@@ -146,12 +146,12 @@ func (r *LiveMigrationReconciler) MigrateCheckpointParallelized(ctx context.Cont
 	dummyPath := "/tmp/checkpoints/checkpoints/dummy"
 
 	postCmd := exec.Command("curl", "-X", "POST", "-F", fmt.Sprintf("file=@%s", dummyPath), fmt.Sprintf("http://%s:%d/upload", dummyIp, dummyPort))
-	klog.Info("[INFO]", "cmd", postCmd.String())
+	klog.Info("[INFO] ", "cmd", postCmd.String())
 	postOut, err := postCmd.CombinedOutput()
 	if err != nil {
 		klog.ErrorS(err, "failed to post on the service", "service", "dummy-service")
 	} else {
-		klog.Info("[INFO]", "service", "dummy-service", "out", string(postOut))
+		klog.Info("[INFO] ", "service", "dummy-service", "out", string(postOut))
 	}
 
 	return nil
@@ -194,7 +194,7 @@ func (r *LiveMigrationReconciler) MigratePod(ctx context.Context, clientset *kub
 		klog.ErrorS(err, "unable to read dir", "dir", pathToClear)
 	}
 
-	klog.Info("pathToClear", "pathToClear", pathToClear)
+	klog.Info("[INFO] ", "pathToClear ", pathToClear)
 
 	err = r.MigrateCheckpointParallelized(ctx, files, pathToClear)
 	if err != nil {
@@ -264,7 +264,7 @@ func (r *LiveMigrationReconciler) MigratePodPipelined(ctx context.Context, clien
 		klog.ErrorS(err, "unable to terminate checkpointed pod", "pod", migratingPod.Name)
 		return ctrl.Result{}, err
 	} else {
-		klog.Info("[INFO]", "pod terminated", migratingPod.Name)
+		klog.Info("[INFO] ", "pod terminated ", migratingPod.Name)
 	}
 
 	// Stage 3: Clean up checkpoints folder
@@ -274,7 +274,7 @@ func (r *LiveMigrationReconciler) MigratePodPipelined(ctx context.Context, clien
 			klog.ErrorS(err, "failed to delete checkpoints folder", "dir", pathToClear)
 			continue
 		} else {
-			klog.Info("[INFO]", "directory cleared", pathToClear)
+			klog.Info("[INFO] ", "directory cleared ", pathToClear)
 		}
 	}
 
