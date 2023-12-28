@@ -86,16 +86,16 @@ func (r *LiveMigrationReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 	if migratingPod.Spec.Template.ObjectMeta.Name != "" {
 		_ = &migratingPod.Spec.Template
 	} else {
-		template, err = utils.GetSourcePodTemplate(clientset, migratingPod.Spec.SourcePod)
+		template, err = utils.GetSourcePodTemplate(clientset, migratingPod.Spec.SourcePod, namespace)
 		if err != nil || template == nil {
-			err = dummy.CreateDummyPod(clientset, ctx)
+			err = dummy.CreateDummyPod(clientset, ctx, namespace)
 			if err != nil {
 				klog.ErrorS(err, "failed to create dummy pod")
 			} else {
 				klog.Info("[INFO] ", "dummy pod created")
 			}
 
-			err = dummy.CreateDummyService(clientset, ctx)
+			err = dummy.CreateDummyService(clientset, ctx, namespace)
 			if err != nil {
 				klog.ErrorS(err, "failed to create dummy service")
 			}
@@ -160,7 +160,7 @@ func (r *LiveMigrationReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 					if strings.Contains(event.Name, "/checkpoints/") && strings.Contains(event.Name, "dummy") {
 						// restoredPod, err := r.buildahRestore(ctx, "/checkpoints/")
 						// restoredPod, err := r.buildahRestoreParallelized(ctx, "/checkpoints/")
-						restoredPod, err := r.BuildahRestorePipelined(ctx, "/checkpoints/", clientset)
+						restoredPod, err := r.BuildahRestorePipelined(ctx, "/checkpoints/", clientset, namespace)
 						if err != nil {
 							klog.ErrorS(err, "failed to restore pod")
 						} else {
@@ -192,7 +192,7 @@ func (r *LiveMigrationReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 				klog.Info("[INFO] ", "stop checking for sourcePod")
 				return
 			default:
-				sourcePod, err := utils.CheckPodExist(clientset, annotations["sourcePod"])
+				sourcePod, err := utils.CheckPodExist(clientset, annotations["sourcePod"], namespace)
 				if err != nil {
 					klog.ErrorS(err, "failed to get sourcePod ", annotations["sourcePod"])
 					return
@@ -233,10 +233,10 @@ func (r *LiveMigrationReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Complete(r)
 }
 
-func (r *LiveMigrationReconciler) RemoveCheckpointPod(ctx context.Context, clientset *kubernetes.Clientset, pod *corev1.Pod, snapshotPathCurrent, newPodName string) error {
+func (r *LiveMigrationReconciler) RemoveCheckpointPod(ctx context.Context, clientset *kubernetes.Clientset, pod *corev1.Pod, snapshotPathCurrent, newPodName string, namespace string) error {
 	if newPodName != "" {
 		for {
-			ok, _ := utils.CheckPodExist(clientset, newPodName)
+			ok, _ := utils.CheckPodExist(clientset, newPodName, namespace)
 			if ok != nil {
 				break
 			}

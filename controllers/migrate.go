@@ -19,7 +19,7 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 )
 
-func (r *LiveMigrationReconciler) MigrateCheckpoint(ctx context.Context, directory string, clientset *kubernetes.Clientset) error {
+func (r *LiveMigrationReconciler) MigrateCheckpoint(ctx context.Context, directory string, clientset *kubernetes.Clientset, namespace string) error {
 
 	files, err := os.ReadDir(directory)
 	if err != nil {
@@ -29,7 +29,7 @@ func (r *LiveMigrationReconciler) MigrateCheckpoint(ctx context.Context, directo
 		klog.Info("[INFO] ", "files in dir: ", files)
 	}
 
-	dummyIp, dummyPort := dummy.GetDummyServiceIPAndPort(clientset, ctx)
+	dummyIp, dummyPort := dummy.GetDummyServiceIPAndPort(clientset, ctx, namespace)
 	klog.Info("[INFO] ", "dummyIp: ", dummyIp, "port: ", dummyPort)
 
 	for _, file := range files {
@@ -60,7 +60,7 @@ func (r *LiveMigrationReconciler) MigrateCheckpoint(ctx context.Context, directo
 	return nil
 }
 
-func (r *LiveMigrationReconciler) MigrateCheckpointParallelized(ctx context.Context, files []os.DirEntry, dir string) error {
+func (r *LiveMigrationReconciler) MigrateCheckpointParallelized(ctx context.Context, files []os.DirEntry, dir string, namespace string) error {
 
 	kubeconfigPath := os.Getenv("KUBECONFIG")
 	if kubeconfigPath == "" {
@@ -84,7 +84,7 @@ func (r *LiveMigrationReconciler) MigrateCheckpointParallelized(ctx context.Cont
 	}
 
 	// inside the worker function for uploading files
-	dummyIp, dummyPort := dummy.GetDummyServiceIPAndPort(clientset, ctx)
+	dummyIp, dummyPort := dummy.GetDummyServiceIPAndPort(clientset, ctx, namespace)
 
 	var wg sync.WaitGroup
 	for _, entry := range files {
@@ -158,7 +158,7 @@ func (r *LiveMigrationReconciler) MigrateCheckpointParallelized(ctx context.Cont
 }
 
 func (r *LiveMigrationReconciler) MigratePod(ctx context.Context, clientset *kubernetes.Clientset, migratingPod *api.LiveMigration, namespace string) (ctrl.Result, error) {
-	containers, err := utils.PrintContainerIDs(clientset, "default")
+	containers, err := utils.PrintContainerIDs(clientset, namespace)
 	if err != nil {
 		klog.ErrorS(err, "unable to get container IDs")
 	}
@@ -174,7 +174,7 @@ func (r *LiveMigrationReconciler) MigratePod(ctx context.Context, clientset *kub
 		return ctrl.Result{}, err
 	}
 
-	err = r.CheckpointPodCrio(containers, "default", migratingPod.Name)
+	err = r.CheckpointPodCrio(containers, namespace, migratingPod.Name)
 	if err != nil {
 		klog.ErrorS(err, "unable to checkpoint")
 	}
@@ -196,7 +196,7 @@ func (r *LiveMigrationReconciler) MigratePod(ctx context.Context, clientset *kub
 
 	klog.Info("[INFO] ", "pathToClear ", pathToClear)
 
-	err = r.MigrateCheckpointParallelized(ctx, files, pathToClear)
+	err = r.MigrateCheckpointParallelized(ctx, files, pathToClear, namespace)
 	if err != nil {
 		klog.ErrorS(err, "migration failed")
 	}
@@ -223,7 +223,7 @@ func (r *LiveMigrationReconciler) MigratePodPipelined(ctx context.Context, clien
 			klog.ErrorS(err, "failed to create checkpoints folder")
 			return
 		}
-		if err := CheckpointPodPipelined(containers, "default", migratingPod.Name); err != nil {
+		if err := CheckpointPodPipelined(containers, namespace, migratingPod.Name); err != nil {
 			klog.ErrorS(err, "unable to checkpoint pod", "pod", migratingPod.Name)
 			return
 		}
@@ -247,7 +247,7 @@ func (r *LiveMigrationReconciler) MigratePodPipelined(ctx context.Context, clien
 				klog.ErrorS(err, "unable to read dir", "dir", path)
 				return
 			}
-			if err := r.MigrateCheckpointParallelized(ctx, files, path); err != nil {
+			if err := r.MigrateCheckpointParallelized(ctx, files, path, namespace); err != nil {
 				klog.ErrorS(err, "migration failed", "dir", path)
 				return
 			}

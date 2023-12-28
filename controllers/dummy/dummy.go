@@ -13,8 +13,8 @@ import (
 	utils "github.com/leonardopoggiani/live-migration-operator/controllers/utils"
 )
 
-func CreateDummyPod(clientset *kubernetes.Clientset, ctx context.Context) error {
-	_, err := clientset.CoreV1().Pods("liqo-demo").Get(ctx, "dummy-pod", metav1.GetOptions{})
+func CreateDummyPod(clientset *kubernetes.Clientset, ctx context.Context, namespace string) error {
+	_, err := clientset.CoreV1().Pods(namespace).Get(ctx, "dummy-pod", metav1.GetOptions{})
 
 	if err != nil {
 		klog.ErrorS(err, "failed to get dummy pod")
@@ -23,7 +23,7 @@ func CreateDummyPod(clientset *kubernetes.Clientset, ctx context.Context) error 
 		pod := &corev1.Pod{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      "dummy-pod",
-				Namespace: "liqo-demo",
+				Namespace: namespace,
 				Labels:    map[string]string{"app": "dummy-pod"},
 			},
 			Spec: corev1.PodSpec{
@@ -68,13 +68,13 @@ func CreateDummyPod(clientset *kubernetes.Clientset, ctx context.Context) error 
 			},
 		}
 
-		_, err = clientset.CoreV1().Pods("liqo-demo").Create(ctx, pod, metav1.CreateOptions{})
+		_, err = clientset.CoreV1().Pods(namespace).Create(ctx, pod, metav1.CreateOptions{})
 		if err != nil {
 			klog.ErrorS(err, "failed to create pod")
 			return err
 		}
 
-		err = utils.WaitForContainerReady(pod.Name, "liqo-demo", "dummy-container", clientset)
+		err = utils.WaitForContainerReady(pod.Name, namespace, "dummy-container", clientset)
 		if err != nil {
 			klog.ErrorS(err, "failed to wait for container ready")
 		} else {
@@ -88,15 +88,15 @@ func CreateDummyPod(clientset *kubernetes.Clientset, ctx context.Context) error 
 	return nil
 }
 
-func CreateDummyService(clientset *kubernetes.Clientset, ctx context.Context) error {
-	_, err := clientset.CoreV1().Services("liqo-demo").Get(ctx, "dummy-service", metav1.GetOptions{})
+func CreateDummyService(clientset *kubernetes.Clientset, ctx context.Context, namespace string) error {
+	_, err := clientset.CoreV1().Services(namespace).Get(ctx, "dummy-service", metav1.GetOptions{})
 	if err != nil {
 		klog.ErrorS(err, "failed to get dummy service")
 
 		service := &corev1.Service{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      "dummy-service",
-				Namespace: "liqo-demo",
+				Namespace: namespace,
 			},
 			Spec: corev1.ServiceSpec{
 				Ports: []corev1.ServicePort{
@@ -112,7 +112,7 @@ func CreateDummyService(clientset *kubernetes.Clientset, ctx context.Context) er
 			},
 		}
 
-		_, err = clientset.CoreV1().Services("liqo-demo").Create(ctx, service, metav1.CreateOptions{})
+		_, err = clientset.CoreV1().Services(namespace).Create(ctx, service, metav1.CreateOptions{})
 		if err != nil {
 			klog.ErrorS(err, "failed to create service")
 			return err
@@ -126,8 +126,8 @@ func CreateDummyService(clientset *kubernetes.Clientset, ctx context.Context) er
 	return nil
 }
 
-func GetDummyServiceIPAndPort(clientset *kubernetes.Clientset, ctx context.Context) (string, int32) {
-	dummyService, err := clientset.CoreV1().Services("liqo-demo").Get(ctx, "dummy-service", metav1.GetOptions{})
+func GetDummyServiceIPAndPort(clientset *kubernetes.Clientset, ctx context.Context, namespace string) (string, int32) {
+	dummyService, err := clientset.CoreV1().Services(namespace).Get(ctx, "dummy-service", metav1.GetOptions{})
 	if err != nil {
 		klog.ErrorS(err, "failed to get dummy service")
 	} else {

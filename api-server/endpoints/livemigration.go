@@ -2,8 +2,9 @@ package endpoints
 
 import (
 	"fmt"
-	"github.com/emicklei/go-restful/v3"
 	"strings"
+
+	"github.com/emicklei/go-restful/v3"
 
 	v1 "github.com/leonardopoggiani/live-migration-operator/api/v1alpha1"
 	corev1 "k8s.io/api/core/v1"
@@ -12,7 +13,7 @@ import (
 	kubelog "sigs.k8s.io/controller-runtime/pkg/log"
 )
 
-var namespace = "default"
+var namespace = "test"
 
 type LivemigrationEndpoint struct {
 	client client.Client
@@ -112,7 +113,7 @@ func (pe *LivemigrationEndpoint) create(request *restful.Request, response *rest
 		return
 	}
 	obj := &v1.LiveMigration{
-		ObjectMeta: metav1.ObjectMeta{Name: pm.Name, Namespace: "default"},
+		ObjectMeta: metav1.ObjectMeta{Name: pm.Name, Namespace: namespace},
 		Spec: v1.LiveMigrationSpec{
 			Replicas:     pm.Replicas,
 			SourcePod:    pm.SourcePod,

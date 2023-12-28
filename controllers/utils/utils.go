@@ -32,9 +32,8 @@ func GetActualRunningPod(childPods *corev1.PodList) (int, corev1.PodList, corev1
 	return count, actualRunningPod, isDeletingPod
 }
 
-func CheckPodExist(clientset *kubernetes.Clientset, name string) (*corev1.Pod, error) {
-
-	existingPod, err := clientset.CoreV1().Pods("default").Get(context.Background(), name, metav1.GetOptions{})
+func CheckPodExist(clientset *kubernetes.Clientset, name string, namespace string) (*corev1.Pod, error) {
+	existingPod, err := clientset.CoreV1().Pods(namespace).Get(context.Background(), name, metav1.GetOptions{})
 	if err != nil {
 		klog.ErrorS(err, "unable to fetch Pod", "pod", name)
 		return nil, err
@@ -44,9 +43,9 @@ func CheckPodExist(clientset *kubernetes.Clientset, name string) (*corev1.Pod, e
 	}
 }
 
-func GetSourcePodTemplate(clientset *kubernetes.Clientset, sourcePodName string) (*corev1.PodTemplateSpec, error) {
+func GetSourcePodTemplate(clientset *kubernetes.Clientset, sourcePodName string, namespace string) (*corev1.PodTemplateSpec, error) {
 	klog.Info("", "getSourcePodTemplate", "sourcePodName", sourcePodName)
-	retrievedPod, err := CheckPodExist(clientset, sourcePodName)
+	retrievedPod, err := CheckPodExist(clientset, sourcePodName, namespace)
 	if retrievedPod == nil {
 		return nil, err
 	} else {
