@@ -1,0 +1,16 @@
+apiVersion: livemigration.liqo.io/v1alpha1
+kind: LiveMigration
+metadata:
+  name: tomcat-pod
+  namespace: default
+  labels:
+    app: tomcat-pod
+spec:
+  replicas: 1
+  action: live-migration
+  sourcePod: tomcat-pod
+  destHost: poggianifedora-2.novalocal
+  selector:
+    matchLabels:
+      app: tomcat
+      namespace: default
