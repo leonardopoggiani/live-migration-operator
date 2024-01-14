@@ -46,6 +46,7 @@ func CheckpointPodPipelined(containers []types.Container, namespace string, podN
 	var wg sync.WaitGroup
 
 	for _, container := range containers {
+		klog.Infof("[INFO] Checkpointing container %s", container.Name)
 		wg.Add(1)
 		go func(containerName string) {
 			defer wg.Done()

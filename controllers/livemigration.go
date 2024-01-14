@@ -360,6 +360,8 @@ func processFile(file os.DirEntry, path string) ([]corev1.Container, string, err
 		Image: "localhost/leonardopoggiani/checkpoint-images:" + containerName,
 	}
 
+	klog.Info("[INFO] pod name: ", podName)
+
 	var containersList []corev1.Container
 	containersList = append(containersList, addContainer)
 

@@ -8,8 +8,6 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
-	"runtime"
-	"strings"
 	"sync"
 
 	utils "github.com/leonardopoggiani/live-migration-operator/controllers/utils"
@@ -68,27 +66,8 @@ func (r *LiveMigrationReconciler) BuildahRestore(ctx context.Context, path strin
 			klog.Info("Checkpoint added to container", string(out))
 		}
 
-		// split the string by "-"
-		parts := strings.Split(checkpointPath, "-")
+		containerName := utils.RetrieveContainerName(checkpointPath)
 
-		// iterate over the parts in reverse order
-		var containerName string
-
-		for i := len(parts) - 1; i >= 0; i-- {
-			part := parts[i]
-
-			// check if the part is a valid date/time
-			if part == "2024" {
-				// the previous part is the container name
-				if i > 0 {
-					containerName = parts[i-1]
-				} else {
-					break
-				}
-			}
-		}
-
-		// Use regular expression to extract string between "checkpoint-" and the next "_" character
 		re := regexp.MustCompile(`checkpoint-(.+?)_`)
 		match := re.FindStringSubmatch(checkpointPath)
 		if len(match) > 1 {
@@ -110,7 +89,7 @@ func (r *LiveMigrationReconciler) BuildahRestore(ctx context.Context, path strin
 		}
 
 		localCheckpointPath := "leonardopoggiani/checkpoint-images:" + containerName
-		klog.Info("", "localCheckpointPath", localCheckpointPath)
+		klog.Infof("[INFO] localCheckpointPath: %s", localCheckpointPath)
 		commitCheckpointCmd := exec.Command("sudo", "buildah", "commit", newContainer, localCheckpointPath)
 		out, err = commitCheckpointCmd.CombinedOutput()
 		if err != nil {
@@ -137,8 +116,8 @@ func (r *LiveMigrationReconciler) BuildahRestore(ctx context.Context, path strin
 		}
 	}
 
-	klog.Info("", "pod ", podName)
-	klog.Info("", "containersList ", containersList)
+	klog.Info("[INFO] pod: ", podName)
+	klog.Info("[INFO] containersList: ", containersList)
 
 	// Create the Pod
 	pod := &corev1.Pod{
@@ -168,6 +147,9 @@ func (r *LiveMigrationReconciler) BuildahRestoreParallelized(ctx context.Context
 	var wg sync.WaitGroup
 	files := getFiles(path)
 	results := make(chan error, len(files))
+	defer close(results)
+
+	klog.Info("Files lenght: ", len(files))
 
 	for _, file := range files {
 		wg.Add(1)
@@ -177,11 +159,9 @@ func (r *LiveMigrationReconciler) BuildahRestoreParallelized(ctx context.Context
 			var err error
 
 			tmpList, podName, err = processFile(file, path)
+			klog.Info("podName: ", podName)
 			if podName != "dummy" {
-				var mutex sync.Mutex
-				mutex.Lock()
 				containersList = append(containersList, tmpList...)
-				mutex.Unlock()
 			} else {
 				return
 			}
@@ -191,10 +171,10 @@ func (r *LiveMigrationReconciler) BuildahRestoreParallelized(ctx context.Context
 			results <- err
 		}(file)
 	}
-	// Wait for all goroutines to finish
+
+	klog.Info("Waiting for workers to finish")
 	wg.Wait()
-	close(results)
-	// Check if any errors occurred
+
 	for err := range results {
 		if err != nil {
 			klog.ErrorS(err, "error processing files")
@@ -207,7 +187,8 @@ func (r *LiveMigrationReconciler) BuildahRestoreParallelized(ctx context.Context
 		klog.ErrorS(err, "failed to read directory", "path", path)
 	}
 
-	// Create the Pod
+	klog.Info("containersList: ", containersList)
+
 	pod := &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      podName,
@@ -237,40 +218,18 @@ func (r *LiveMigrationReconciler) BuildahRestorePipelined(ctx context.Context, p
 		klog.Info("", "podName: ", podName)
 	}
 
-	resultChan := make(chan []corev1.Container)
-	defer close(resultChan)
+	var containers []corev1.Container
 
-	numWorkers := runtime.NumCPU()
-	if len(files) < numWorkers {
-		numWorkers = len(files)
-	}
-
-	var wg sync.WaitGroup
-
-	klog.Info("", "numWorkers ", numWorkers)
-	for i := 0; i < numWorkers; i++ {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			for _, file := range files {
-				if containers, _, err := processFile(file, path); err != nil {
-					klog.ErrorS(err, "failed to process file: ", file.Name())
-				} else {
-					resultChan <- containers
-				}
-			}
-		}()
-	}
-
-	wg.Wait()
-
-	// Fan-in the results from workers and build the container list
-	var containersList []corev1.Container
-	for containers := range resultChan {
-		if len(containers) > 0 {
-			containersList = append(containersList, containers...)
+	for _, file := range files {
+		if containers, out, err := processFile(file, path); err != nil {
+			klog.ErrorS(err, "failed to process file: ", file.Name())
+			return nil, err
+		} else {
+			klog.Info("", "file: ", file.Name(), " out: ", out, " containers: ", len(containers))
 		}
 	}
+
+	klog.Infof("[INFO] containers list length: %d", len(containers))
 
 	// Create the Pod
 	pod := &corev1.Pod{
@@ -279,17 +238,19 @@ func (r *LiveMigrationReconciler) BuildahRestorePipelined(ctx context.Context, p
 			Namespace: namespace,
 		},
 		Spec: corev1.PodSpec{
-			Containers:            containersList,
+			Containers:            containers,
 			ShareProcessNamespace: &[]bool{true}[0],
 		},
 	}
+
+	klog.Info("[INFO] creating pod: ", pod)
 
 	if pod, err := clientset.CoreV1().Pods(namespace).Create(ctx, pod, metav1.CreateOptions{}); err != nil {
 		klog.ErrorS(err, "failed to create restored pod", "podName", pod.Name)
 		return nil, err
 	}
 
-	klog.InfoS("restored pod", "podName", pod.Name)
+	klog.Infof("restored pod %s", pod.Name)
 	return pod, nil
 }
 

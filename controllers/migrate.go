@@ -37,8 +37,6 @@ func (r *LiveMigrationReconciler) MigrateCheckpoint(ctx context.Context, directo
 		checkpointPath := filepath.Join(directory, file.Name())
 		klog.Info("[INFO] ", "checkpointPath: ", checkpointPath)
 
-		// change permissions of checkpoint file
-		// sudo chmod +r /tmp/checkpoints/checkpoints/checkpoint-tomcat-pod_liqo-demo-tomcat-2023-04-18T09:39:13Z.tar
 		chmodCmd := exec.Command("sudo", "chmod", "+rwx", checkpointPath)
 		chmodOutput, err := chmodCmd.Output()
 		if err != nil {
@@ -99,30 +97,26 @@ func (r *LiveMigrationReconciler) MigrateCheckpointParallelized(ctx context.Cont
 			checkpointPath := filepath.Join(dir, file.Name())
 			klog.Infof("checkpointPath: %s", checkpointPath)
 
-			// Check if the file is already in the cache.
 			cacheKey := checkpointPath
 			cachedData, err := fileCache.Get([]byte(cacheKey))
+
 			if err == nil {
 				klog.Info("[INFO] ", "Found file data in cache for: ", checkpointPath)
 
-				// Use cachedData as needed.
 				_ = cachedData
 			} else {
-				// Read the file data from disk.
 				fileData, err := os.ReadFile(checkpointPath)
 				if err != nil {
 					klog.ErrorS(err, "failed to read file data", "file", checkpointPath)
 					return
 				}
 
-				// Store the file data in the cache.
 				err = fileCache.Set([]byte(cacheKey), fileData, 0)
 				if err != nil {
 					klog.ErrorS(err, "failed to cache file data", "file", checkpointPath)
 					return
 				}
 
-				// Perform the upload with the file data.
 				postCmd := exec.Command("curl", "-X", "POST", "-F", fmt.Sprintf("file=@%s", checkpointPath), fmt.Sprintf("http://%s:%d/upload", dummyIp, dummyPort))
 				klog.Info("[INFO] ", "cmd", postCmd.String())
 				postOut, err := postCmd.CombinedOutput()
@@ -136,7 +130,6 @@ func (r *LiveMigrationReconciler) MigrateCheckpointParallelized(ctx context.Cont
 	}
 	wg.Wait()
 
-	// send a dummy file at the end to signal the end of the migration
 	createDummyFile := exec.Command("sudo", "touch", "/tmp/checkpoints/checkpoints/dummy")
 	createDummyFileOutput, err := createDummyFile.Output()
 	if err != nil {

@@ -184,7 +184,7 @@ func RetrieveContainerName(path string) string {
 		if part == "2024" {
 			// the previous part is the container name
 			if i > 0 {
-				containerName := fmt.Sprintf("%s-%s-%s", parts[i-3], parts[i-2], parts[i-1])
+				containerName := fmt.Sprintf("%s-%s", parts[i-2], parts[i-1])
 				klog.Infof("container name: %s", containerName)
 				return containerName
 			} else {
@@ -197,10 +197,8 @@ func RetrieveContainerName(path string) string {
 }
 
 func PushDockerImage(localCheckpointPath string, containerName string, podName string) {
-	authFile := "/run/user/1000/containers/auth.json"
-	localCheckpointPath = "localhost/" + localCheckpointPath
-	remoteCheckpointPath := "docker.io/leonardopoggiani/checkpoint-images:" + containerName
-	pushCheckpointCmd := exec.Command("sudo", "buildah", "push", "--authfile", authFile, localCheckpointPath, remoteCheckpointPath)
+	remoteCheckpointPath := "172.16.3.75:5000/checkpoint-images:" + containerName
+	pushCheckpointCmd := exec.Command("sudo", "buildah", "push", "--tls-verify=false", localCheckpointPath, remoteCheckpointPath)
 	klog.Info(pushCheckpointCmd.String())
 	if err := pushCheckpointCmd.Run(); err != nil {
 		klog.ErrorS(err, "failed to push checkpoint")
