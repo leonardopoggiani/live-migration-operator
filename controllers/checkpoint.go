@@ -3,6 +3,7 @@ package controllers
 import (
 	"context"
 	"os/exec"
+	"sync"
 
 	"github.com/leonardopoggiani/live-migration-operator/controllers/types"
 	"github.com/leonardopoggiani/live-migration-operator/controllers/utils"
@@ -42,8 +43,13 @@ func (r *LiveMigrationReconciler) TerminateCheckpointedPod(ctx context.Context, 
 }
 
 func CheckpointPodPipelined(containers []types.Container, namespace string, podName string) error {
+	var wg sync.WaitGroup
+
 	for _, container := range containers {
+		wg.Add(1)
 		go func(containerName string) {
+			defer wg.Done()
+
 			curlPath := "https://localhost:10250/checkpoint/" + namespace + "/" + podName + "/" + containerName
 			checkpointCmd := exec.Command("curl", "-sk", "-XPOST", curlPath)
 
@@ -53,6 +59,8 @@ func CheckpointPodPipelined(containers []types.Container, namespace string, podN
 			}
 		}(container.Name)
 	}
+
+	wg.Wait()
 
 	return nil
 }

@@ -29,7 +29,6 @@ func (r *LiveMigrationReconciler) BuildahRestore(ctx context.Context, path strin
 	}
 
 	for _, file := range files {
-
 		if file.Name() == "dummy" {
 			klog.Info("dummy file read")
 			break
@@ -79,7 +78,7 @@ func (r *LiveMigrationReconciler) BuildahRestore(ctx context.Context, path strin
 			part := parts[i]
 
 			// check if the part is a valid date/time
-			if part == "2023" {
+			if part == "2024" {
 				// the previous part is the container name
 				if i > 0 {
 					containerName = parts[i-1]
@@ -93,7 +92,7 @@ func (r *LiveMigrationReconciler) BuildahRestore(ctx context.Context, path strin
 		re := regexp.MustCompile(`checkpoint-(.+?)_`)
 		match := re.FindStringSubmatch(checkpointPath)
 		if len(match) > 1 {
-			klog.Info("pod name:", match[1])
+			klog.Info("pod name: ", match[1])
 		} else {
 			fmt.Println("No match found")
 		}
@@ -138,8 +137,8 @@ func (r *LiveMigrationReconciler) BuildahRestore(ctx context.Context, path strin
 		}
 	}
 
-	klog.Info("", "pod", podName)
-	klog.Info("", "containersList", containersList)
+	klog.Info("", "pod ", podName)
+	klog.Info("", "containersList ", containersList)
 
 	// Create the Pod
 	pod := &corev1.Pod{
@@ -167,10 +166,9 @@ func (r *LiveMigrationReconciler) BuildahRestoreParallelized(ctx context.Context
 	var podName string
 
 	var wg sync.WaitGroup
-	files := getFiles(path) // Get list of files to process
-	// Create a channel to receive the results
+	files := getFiles(path)
 	results := make(chan error, len(files))
-	// Process each file in a separate goroutine
+
 	for _, file := range files {
 		wg.Add(1)
 		go func(file os.DirEntry) {
@@ -230,39 +228,39 @@ func (r *LiveMigrationReconciler) BuildahRestoreParallelized(ctx context.Context
 	return pod, nil
 }
 
+func sendFile(fileChan chan<- os.DirEntry, file os.DirEntry) error {
+	klog.Info("", "send file ", file.Name())
+	fileChan <- file
+	return nil
+}
+
 func (r *LiveMigrationReconciler) BuildahRestorePipelined(ctx context.Context, path string, clientset *kubernetes.Clientset, namespace string) (*corev1.Pod, error) {
 	files := getFiles(path) // Get list of files to process
 	podName := utils.RetrievePodName(files[0].Name())
+	if podName == "" {
+		return nil, fmt.Errorf("failed to retrieve pod name")
+	} else {
+		klog.Info("", "podName: ", podName)
+	}
 
-	// Channel to send files to workers
-	fileChan := make(chan os.DirEntry)
-
-	// Start the generator
-	go func() {
-		defer close(fileChan)
-		for _, file := range files {
-			fileChan <- file
-		}
-	}()
-
-	// Channel to receive the processed results
 	resultChan := make(chan []corev1.Container)
+	defer close(resultChan)
 
-	// Determine the number of workers to use based on the number of files and system resources
 	numWorkers := runtime.NumCPU()
 	if len(files) < numWorkers {
 		numWorkers = len(files)
 	}
 
-	// Start the worker pool
 	var wg sync.WaitGroup
+
+	klog.Info("", "numWorkers ", numWorkers)
 	for i := 0; i < numWorkers; i++ {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			for file := range fileChan {
+			for _, file := range files {
 				if containers, _, err := processFile(file, path); err != nil {
-					klog.ErrorS(err, "failed to process file", "file", file.Name())
+					klog.ErrorS(err, "failed to process file: ", file.Name())
 				} else {
 					resultChan <- containers
 				}
@@ -270,11 +268,7 @@ func (r *LiveMigrationReconciler) BuildahRestorePipelined(ctx context.Context, p
 		}()
 	}
 
-	// Close the result channel when all workers are done
-	go func() {
-		wg.Wait()
-		close(resultChan)
-	}()
+	wg.Wait()
 
 	// Fan-in the results from workers and build the container list
 	var containersList []corev1.Container

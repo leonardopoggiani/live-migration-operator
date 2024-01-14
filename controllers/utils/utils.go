@@ -94,8 +94,8 @@ func PrintContainerIDs(clientset *kubernetes.Clientset, namespace string) ([]typ
 }
 
 func WaitForContainerReady(podName, namespace, containerName string, clientset *kubernetes.Clientset) error {
-	timeout := 180 * time.Second
-	interval := 5 * time.Second
+	timeout := 300 * time.Second
+	interval := 20 * time.Second
 
 	timeoutChan := time.After(timeout)
 	ticker := time.NewTicker(interval)
@@ -109,7 +109,6 @@ func WaitForContainerReady(podName, namespace, containerName string, clientset *
 			if err := checkContainerReady(podName, namespace, containerName, clientset); err == nil {
 				return nil
 			}
-			// Continue looping if the container is not ready
 		}
 	}
 }
@@ -168,9 +167,10 @@ func RetrievePodName(path string) string {
 	match := re.FindStringSubmatch(path)
 	if len(match) > 1 {
 		klog.Info("pod name:", match[1])
+		return match[1]
 	}
 
-	return match[1]
+	return ""
 }
 
 func RetrieveContainerName(path string) string {
@@ -181,7 +181,7 @@ func RetrieveContainerName(path string) string {
 		part := parts[i]
 
 		// check if the part is a valid date/time
-		if part == "2023" {
+		if part == "2024" {
 			// the previous part is the container name
 			if i > 0 {
 				return parts[i-1]

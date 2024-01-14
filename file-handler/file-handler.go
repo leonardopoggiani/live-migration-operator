@@ -34,7 +34,7 @@ func handleFile(w http.ResponseWriter, r *http.Request) {
 			}
 		}(file)
 
-		klog.Infof("Saving file to disk...", "file", header.Filename)
+		klog.Info("Saving file to disk...", "file", header.Filename)
 
 		bytes, err := io.ReadAll(file)
 		if err != nil {

@@ -296,73 +296,66 @@ func processFile(file os.DirEntry, path string) ([]corev1.Container, string, err
 
 	var newContainer string
 
+	// Create a new container
+	newContainerCmd := exec.Command("sudo", "buildah", "from", "scratch")
+
+	newContainerOutput, err := newContainerCmd.Output()
+	if err != nil {
+		klog.ErrorS(err, "failed to create new container ", "containerID", newContainerOutput)
+		results <- "failed to create new container\n"
+	}
+
+	newContainerOutput = bytes.TrimRight(newContainerOutput, "\n") // remove trailing newline
+	newContainer = string(newContainerOutput)
+
+	klog.Infof("[INFO] new container name: %s", newContainer)
+
+	addCheckpointCmd := exec.Command("sudo", "buildah", "add", newContainer, checkpointPath, "/")
+
+	out, err := addCheckpointCmd.CombinedOutput()
+	if err != nil {
+		klog.ErrorS(err, "failed to add file to container")
+		results <- string(out)
+	}
+
+	// Add an annotation to the container with the checkpoint name
+	annotation := fmt.Sprintf("--annotation=io.kubernetes.cri-o.annotations.checkpoint.name=%s", containerName)
+	klog.Info("[INFO] ", "annotation", annotation)
+
+	configCheckpointCmd := exec.Command("sudo", "buildah", "config", annotation, newContainer)
+
+	out, err = configCheckpointCmd.CombinedOutput()
+	if err != nil {
+		klog.ErrorS(err, "failed to add checkpoint to container")
+		results <- "failed to add checkpoint to container "
+	} else {
+		klog.Infof("[INFO] %s: %s", "Checkpoint added to container ", string(out))
+	}
+
 	go func() {
+		localCheckpointPath := "leonardopoggiani/checkpoint-images:" + containerName
+		klog.Info("[INFO] ", "localCheckpointPath ", localCheckpointPath)
 
-		// Create a new container
-		newContainerCmd := exec.Command("sudo", "buildah", "from", "scratch")
+		commitCheckpointCmd := exec.Command("sudo", "buildah", "commit", newContainer, localCheckpointPath)
 
-		newContainerOutput, err := newContainerCmd.Output()
+		out, err = commitCheckpointCmd.CombinedOutput()
 		if err != nil {
-			klog.ErrorS(err, "failed to create new container ", "containerID", newContainerOutput)
-			results <- "failed to create new container\n"
-			return
-		}
-
-		newContainerOutput = bytes.TrimRight(newContainerOutput, "\n") // remove trailing newline
-		newContainer = string(newContainerOutput)
-
-		klog.Info("[INFO] ", "new container name ", newContainer)
-
-		addCheckpointCmd := exec.Command("sudo", "buildah", "add", newContainer, checkpointPath, "/")
-
-		out, err := addCheckpointCmd.CombinedOutput()
-		if err != nil {
-			klog.ErrorS(err, "failed to add file to container")
-			results <- "failed to add file to container"
-			return
-		}
-
-		// Add an annotation to the container with the checkpoint name
-		annotation := "--annotation=io.kubernetes.cri-o.annotations.checkpoint.name=" + containerName
-		klog.Info("[INFO] ", "annotation", annotation)
-
-		configCheckpointCmd := exec.Command("sudo", "buildah", "config", annotation, newContainer)
-
-		out, err = configCheckpointCmd.CombinedOutput()
-		if err != nil {
-			klog.ErrorS(err, "failed to add checkpoint to container")
-			results <- "failed to add checkpoint to container "
-			return
+			klog.ErrorS(err, "failed to commit checkpoint")
+			results <- "failed to commit checkpoint"
 		} else {
-			klog.Info("[INFO] ", "Checkpoint added to container %s", string(out))
+			klog.Info("[INFO] ", "Checkpoint committed %s", string(out))
 		}
 
-		go func() {
-			localCheckpointPath := "leonardopoggiani/checkpoint-images:" + containerName
-			klog.Info("[INFO] ", "localCheckpointPath ", localCheckpointPath)
+		removeContainerCmd := exec.Command("sudo", "buildah", "rm", newContainer)
 
-			commitCheckpointCmd := exec.Command("sudo", "buildah", "commit", newContainer, localCheckpointPath)
-
-			out, err = commitCheckpointCmd.CombinedOutput()
-			if err != nil {
-				klog.ErrorS(err, "failed to commit checkpoint")
-				results <- "failed to commit checkpoint"
-				return
-			} else {
-				klog.Info("[INFO] ", "Checkpoint committed %s", string(out))
-			}
-
-			removeContainerCmd := exec.Command("sudo", "buildah", "rm", newContainer)
-
-			out, err = removeContainerCmd.CombinedOutput()
-			if err != nil {
-				klog.ErrorS(err, "failed to remove container")
-				klog.Info("[INFO] ", "out: %s", out)
-			}
-		}()
-
-		results <- "File added to container: " + string(out)
+		out, err = removeContainerCmd.CombinedOutput()
+		if err != nil {
+			klog.ErrorS(err, "failed to remove container")
+			klog.Info("[INFO] ", "out: %s", out)
+		}
 	}()
+
+	results <- "File added to container: " + string(out)
 
 	addContainer := corev1.Container{
 		Name:  containerName,
