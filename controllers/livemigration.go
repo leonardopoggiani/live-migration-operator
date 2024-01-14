@@ -320,7 +320,7 @@ func processFile(file os.DirEntry, path string) ([]corev1.Container, string, err
 
 	// Add an annotation to the container with the checkpoint name
 	annotation := fmt.Sprintf("--annotation=io.kubernetes.cri-o.annotations.checkpoint.name=%s", containerName)
-	klog.Info("[INFO] ", "annotation", annotation)
+	klog.Infof("[INFO] annotation: %s", annotation)
 
 	configCheckpointCmd := exec.Command("sudo", "buildah", "config", annotation, newContainer)
 
@@ -329,31 +329,29 @@ func processFile(file os.DirEntry, path string) ([]corev1.Container, string, err
 		klog.ErrorS(err, "failed to add checkpoint to container")
 		results <- "failed to add checkpoint to container "
 	} else {
-		klog.Infof("[INFO] %s: %s", "Checkpoint added to container ", string(out))
+		klog.Infof("[INFO] Checkpoint added to container: %s", string(out))
 	}
 
-	go func() {
-		localCheckpointPath := "leonardopoggiani/checkpoint-images:" + containerName
-		klog.Info("[INFO] ", "localCheckpointPath ", localCheckpointPath)
+	localCheckpointPath := "leonardopoggiani/checkpoint-images:" + containerName
+	klog.Infof("[INFO] localCheckpointPath: %s", localCheckpointPath)
 
-		commitCheckpointCmd := exec.Command("sudo", "buildah", "commit", newContainer, localCheckpointPath)
+	commitCheckpointCmd := exec.Command("sudo", "buildah", "commit", newContainer, localCheckpointPath)
 
-		out, err = commitCheckpointCmd.CombinedOutput()
-		if err != nil {
-			klog.ErrorS(err, "failed to commit checkpoint")
-			results <- "failed to commit checkpoint"
-		} else {
-			klog.Info("[INFO] ", "Checkpoint committed %s", string(out))
-		}
+	out, err = commitCheckpointCmd.CombinedOutput()
+	if err != nil {
+		klog.ErrorS(err, "failed to commit checkpoint")
+		results <- "failed to commit checkpoint"
+	} else {
+		klog.Infof("[INFO] Checkpoint committed %s", string(out))
+	}
 
-		removeContainerCmd := exec.Command("sudo", "buildah", "rm", newContainer)
+	removeContainerCmd := exec.Command("sudo", "buildah", "rm", newContainer)
 
-		out, err = removeContainerCmd.CombinedOutput()
-		if err != nil {
-			klog.ErrorS(err, "failed to remove container")
-			klog.Info("[INFO] ", "out: %s", out)
-		}
-	}()
+	out, err = removeContainerCmd.CombinedOutput()
+	if err != nil {
+		klog.ErrorS(err, "failed to remove container")
+		klog.Infof("[INFO] out: %s", out)
+	}
 
 	results <- "File added to container: " + string(out)
 

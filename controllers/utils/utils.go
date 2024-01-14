@@ -184,7 +184,9 @@ func RetrieveContainerName(path string) string {
 		if part == "2024" {
 			// the previous part is the container name
 			if i > 0 {
-				return parts[i-1]
+				containerName := fmt.Sprintf("%s-%s-%s", parts[i-3], parts[i-2], parts[i-1])
+				klog.Infof("container name: %s", containerName)
+				return containerName
 			} else {
 				break
 			}
