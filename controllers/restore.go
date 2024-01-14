@@ -228,12 +228,6 @@ func (r *LiveMigrationReconciler) BuildahRestoreParallelized(ctx context.Context
 	return pod, nil
 }
 
-func sendFile(fileChan chan<- os.DirEntry, file os.DirEntry) error {
-	klog.Info("", "send file ", file.Name())
-	fileChan <- file
-	return nil
-}
-
 func (r *LiveMigrationReconciler) BuildahRestorePipelined(ctx context.Context, path string, clientset *kubernetes.Clientset, namespace string) (*corev1.Pod, error) {
 	files := getFiles(path) // Get list of files to process
 	podName := utils.RetrievePodName(files[0].Name())
