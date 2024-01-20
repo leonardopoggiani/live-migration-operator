@@ -43,3 +43,4 @@ config/samples/*
 !.gitignore
 !.github/**
 .git*
+certs/
