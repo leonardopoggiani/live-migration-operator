@@ -1,60 +1,69 @@
-package file_handler
+package main
 
 import (
 	"io"
-	"mime/multipart"
-	"net/http"
 	"os"
+	"strings"
 
+	"github.com/valyala/fasthttp"
 	"k8s.io/klog/v2"
 )
 
 func main() {
 	klog.Infof("Starting file handler...")
-	http.HandleFunc("/", handleFile)
-	err := http.ListenAndServe(":8080", nil)
+
+	// the corresponding fasthttp code
+	m := func(ctx *fasthttp.RequestCtx) {
+		switch string(ctx.Path()) {
+		case "/upload":
+			handleFile(ctx)
+		default:
+			ctx.Error("not found", fasthttp.StatusNotFound)
+		}
+	}
+
+	err := fasthttp.ListenAndServe(":8080", m)
 	if err != nil {
 		klog.ErrorS(err, "Failed to start file handler.")
 	}
 }
 
-func handleFile(w http.ResponseWriter, r *http.Request) {
-	if r.Method == "POST" {
-		file, header, err := r.FormFile("file")
+func handleFile(ctx *fasthttp.RequestCtx) {
+	if strings.EqualFold(string(ctx.Method()), "POST") {
+		file, err := ctx.FormFile("file")
 		if err != nil {
-			http.Error(w, err.Error(), http.StatusBadRequest)
+			ctx.Error("Unsupported path", fasthttp.StatusBadRequest)
 			return
 		} else {
-			klog.Infof("File received", "file", header.Filename)
+			klog.Infof("File received %s", file.Filename)
 		}
-		defer func(file multipart.File) {
-			err := file.Close()
-			if err != nil {
-				klog.ErrorS(err, "Failed to close file.")
-			}
-		}(file)
 
-		klog.Info("Saving file to disk...", "file", header.Filename)
-
-		bytes, err := io.ReadAll(file)
+		klog.Info("Saving file to disk...", "file", file.Filename)
+		opened, err := file.Open()
 		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			ctx.Error("Failed to open file", fasthttp.StatusInternalServerError)
 			return
 		}
 
-		err = os.WriteFile("/mnt/data/"+header.Filename, bytes, 0644)
+		bytes, err := io.ReadAll(opened)
 		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			ctx.Error("Failed to read file", fasthttp.StatusInternalServerError)
+			return
+		}
+
+		err = os.WriteFile("/mnt/data/"+file.Filename, bytes, 0644)
+		if err != nil {
+			ctx.Error("Failed to write file", fasthttp.StatusInternalServerError)
 			return
 		}
 
 		klog.Infof("File saved successfully.")
 		return
-	} else if r.Method == "GET" {
+	} else if strings.EqualFold(string(ctx.Method()), "GET") {
 		klog.Infof("Debug GET request received.")
-		http.Error(w, "Debug GET request received.", http.StatusOK)
+		ctx.SetStatusCode(fasthttp.StatusOK)
 		return
 	}
 
-	http.Error(w, "Method not allowed.", http.StatusMethodNotAllowed)
+	ctx.Error("Method not allowed.", fasthttp.StatusMethodNotAllowed)
 }
