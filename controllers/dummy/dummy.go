@@ -126,14 +126,3 @@ func CreateDummyService(clientset *kubernetes.Clientset, ctx context.Context, na
 
 	return nil
 }
-
-func GetDummyServiceIPAndPort(clientset *kubernetes.Clientset, ctx context.Context, namespace string) (string, int32) {
-	dummyService, err := clientset.CoreV1().Services(namespace).Get(ctx, "dummy-service", metav1.GetOptions{})
-	if err != nil {
-		klog.ErrorS(err, "failed to get dummy service")
-	} else {
-		klog.Info("dummy service found", dummyService.Spec.ClusterIP)
-	}
-
-	return dummyService.Spec.ClusterIP, dummyService.Spec.Ports[0].Port
-}

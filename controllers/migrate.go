@@ -9,18 +9,15 @@ import (
 	"sync"
 
 	api "github.com/leonardopoggiani/live-migration-operator/api/v1alpha1"
-	dummy "github.com/leonardopoggiani/live-migration-operator/controllers/dummy"
 
 	"github.com/leonardopoggiani/live-migration-operator/controllers/utils"
 
 	"k8s.io/client-go/kubernetes"
-	"k8s.io/client-go/tools/clientcmd"
 	"k8s.io/klog/v2"
 	ctrl "sigs.k8s.io/controller-runtime"
 )
 
 func (r *LiveMigrationReconciler) MigrateCheckpoint(ctx context.Context, directory string, clientset *kubernetes.Clientset, namespace string) error {
-
 	files, err := os.ReadDir(directory)
 	if err != nil {
 		klog.ErrorS(err, "failed to read dir", "dir", directory)
@@ -29,7 +26,8 @@ func (r *LiveMigrationReconciler) MigrateCheckpoint(ctx context.Context, directo
 		klog.Info("[INFO] files in dir: ", files)
 	}
 
-	dummyIp, dummyPort := dummy.GetDummyServiceIPAndPort(clientset, ctx, namespace)
+	utils.WaitForServiceReady(ctx, "dummy-service", namespace, clientset)
+	dummyIp, dummyPort := utils.GetDummyServiceIPAndPort(clientset, ctx, namespace)
 	klog.Info("[INFO] ", "dummyIp: ", dummyIp, ", port: ", dummyPort)
 
 	for _, file := range files {
@@ -58,31 +56,9 @@ func (r *LiveMigrationReconciler) MigrateCheckpoint(ctx context.Context, directo
 	return nil
 }
 
-func (r *LiveMigrationReconciler) MigrateCheckpointParallelized(ctx context.Context, files []os.DirEntry, dir string, namespace string) error {
-
-	kubeconfigPath := os.Getenv("KUBECONFIG")
-	if kubeconfigPath == "" {
-		kubeconfigPath = "~/.kube/config"
-	}
-
-	kubeconfigPath = os.ExpandEnv(kubeconfigPath)
-	if _, err := os.Stat(kubeconfigPath); os.IsNotExist(err) {
-		klog.ErrorS(err, "kubeconfig file not existing")
-	}
-
-	kubeconfig, err := clientcmd.BuildConfigFromFlags("", kubeconfigPath)
-	if err != nil {
-		klog.ErrorS(err, "Failed to retrieve kubeconfig")
-	}
-
-	// Create Kubernetes API client
-	clientset, err := kubernetes.NewForConfig(kubeconfig)
-	if err != nil {
-		klog.ErrorS(err, "failed to create Kubernetes client")
-	}
-
+func (r *LiveMigrationReconciler) MigrateCheckpointParallelized(ctx context.Context, files []os.DirEntry, dir string, clientset *kubernetes.Clientset, namespace string) error {
 	// inside the worker function for uploading files
-	dummyIp, dummyPort := dummy.GetDummyServiceIPAndPort(clientset, ctx, namespace)
+	dummyIp, dummyPort := utils.GetDummyServiceIPAndPort(clientset, ctx, namespace)
 
 	var wg sync.WaitGroup
 	for _, entry := range files {
@@ -97,37 +73,18 @@ func (r *LiveMigrationReconciler) MigrateCheckpointParallelized(ctx context.Cont
 			checkpointPath := filepath.Join(dir, file.Name())
 			klog.Infof("checkpointPath: %s", checkpointPath)
 
-			cacheKey := checkpointPath
-			cachedData, err := fileCache.Get([]byte(cacheKey))
-
-			if err == nil {
-				klog.Info("[INFO] ", "Found file data in cache for: ", checkpointPath)
-
-				_ = cachedData
+			postCmd := exec.Command("curl", "-X", "POST", "-F", fmt.Sprintf("file=@%s", checkpointPath), fmt.Sprintf("http://%s:%d/upload", dummyIp, dummyPort))
+			klog.Info("[INFO] ", "cmd", postCmd.String())
+			postOut, err := postCmd.CombinedOutput()
+			if err != nil {
+				klog.ErrorS(err, "failed to post on the service", "service", "dummy-service")
 			} else {
-				fileData, err := os.ReadFile(checkpointPath)
-				if err != nil {
-					klog.ErrorS(err, "failed to read file data", "file", checkpointPath)
-					return
-				}
-
-				err = fileCache.Set([]byte(cacheKey), fileData, 0)
-				if err != nil {
-					klog.ErrorS(err, "failed to cache file data", "file", checkpointPath)
-					return
-				}
-
-				postCmd := exec.Command("curl", "-X", "POST", "-F", fmt.Sprintf("file=@%s", checkpointPath), fmt.Sprintf("http://%s:%d/upload", dummyIp, dummyPort))
-				klog.Info("[INFO] ", "cmd", postCmd.String())
-				postOut, err := postCmd.CombinedOutput()
-				if err != nil {
-					klog.ErrorS(err, "failed to post on the service", "service", "dummy-service")
-				} else {
-					klog.Info("[INFO] ", "service", "dummy-service", "out", string(postOut))
-				}
+				klog.Info("[INFO] ", "service", "dummy-service", "out", string(postOut))
 			}
+
 		}(entry)
 	}
+
 	wg.Wait()
 
 	createDummyFile := exec.Command("sudo", "touch", "/tmp/checkpoints/checkpoints/dummy")
@@ -189,7 +146,7 @@ func (r *LiveMigrationReconciler) MigratePod(ctx context.Context, clientset *kub
 
 	klog.Info("[INFO] ", "pathToClear ", pathToClear)
 
-	err = r.MigrateCheckpointParallelized(ctx, files, pathToClear, namespace)
+	err = r.MigrateCheckpointParallelized(ctx, files, pathToClear, clientset, namespace)
 	if err != nil {
 		klog.ErrorS(err, "migration failed")
 	}
@@ -240,7 +197,7 @@ func (r *LiveMigrationReconciler) MigratePodPipelined(ctx context.Context, clien
 				klog.ErrorS(err, "unable to read dir", "dir", path)
 				return
 			}
-			if err := r.MigrateCheckpointParallelized(ctx, files, path, namespace); err != nil {
+			if err := r.MigrateCheckpointParallelized(ctx, files, path, clientset, namespace); err != nil {
 				klog.ErrorS(err, "migration failed", "dir", path)
 				return
 			}

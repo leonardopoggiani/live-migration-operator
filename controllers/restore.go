@@ -124,6 +124,7 @@ func (r *LiveMigrationReconciler) BuildahRestore(ctx context.Context, path strin
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      podName,
 			Namespace: namespace,
+			Labels:    map[string]string{"app": "test"},
 		},
 		Spec: corev1.PodSpec{
 			Containers:            containersList,
@@ -151,36 +152,25 @@ func (r *LiveMigrationReconciler) BuildahRestoreParallelized(ctx context.Context
 
 	klog.Info("Files lenght: ", len(files))
 
-	for _, file := range files {
+	for i, file := range files {
+		var tmpList []corev1.Container
+		var err error
 		wg.Add(1)
-		go func(file os.DirEntry) {
+		go func(index int, file os.DirEntry) {
 			defer wg.Done()
-			var tmpList []corev1.Container
-			var err error
-
 			tmpList, podName, err = processFile(file, path)
-			klog.Info("podName: ", podName)
-			if podName != "dummy" {
-				containersList = append(containersList, tmpList...)
-			} else {
-				return
-			}
 			if err != nil {
-				klog.ErrorS(err, "failed to process file", "file", file.Name())
+				klog.ErrorS(err, "error processing file")
+				results <- err
 			}
-			results <- err
-		}(file)
+			containersList = append(containersList, tmpList...)
+			klog.Infof("podName-%d: %s", index, podName)
+		}(i, file)
 	}
 
 	klog.Info("Waiting for workers to finish")
 	wg.Wait()
-
-	for err := range results {
-		if err != nil {
-			klog.ErrorS(err, "error processing files")
-			return nil, err
-		}
-	}
+	klog.Info("Workers awaited")
 
 	_, err := os.ReadDir(path)
 	if err != nil {
@@ -193,6 +183,7 @@ func (r *LiveMigrationReconciler) BuildahRestoreParallelized(ctx context.Context
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      podName,
 			Namespace: namespace,
+			Labels:    map[string]string{"app": "test"},
 		},
 		Spec: corev1.PodSpec{
 			Containers:            containersList,
@@ -236,6 +227,7 @@ func (r *LiveMigrationReconciler) BuildahRestorePipelined(ctx context.Context, p
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      podName,
 			Namespace: namespace,
+			Labels:    map[string]string{"app": "test"},
 		},
 		Spec: corev1.PodSpec{
 			Containers:            containers,

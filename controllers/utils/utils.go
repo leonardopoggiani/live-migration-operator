@@ -208,3 +208,35 @@ func PushDockerImage(localCheckpointPath string, containerName string, podName s
 
 	klog.Info("", "newPod", podName)
 }
+
+func WaitForServiceReady(ctx context.Context, serviceName, namespace string, clientset *kubernetes.Clientset) {
+	klog.Infof("Waiting for Service %s to be ready...", serviceName)
+
+	for {
+		_, err := clientset.CoreV1().Services(namespace).Get(ctx, serviceName, metav1.GetOptions{})
+		if err == nil {
+			ip, port := GetDummyServiceIPAndPort(clientset, ctx, namespace)
+			getCmd := exec.Command("curl", fmt.Sprintf("http://%s:%d/", ip, port))
+			output, _ := getCmd.Output()
+			if strings.Contains(string(output), "not found") {
+				klog.Infof("Service '%s' in namespace '%s' is ready.\n", serviceName, namespace)
+				break
+			}
+		}
+
+		klog.Infof("Waiting for Service '%s' to be ready...\n", serviceName)
+		time.Sleep(5 * time.Second)
+	}
+}
+
+func GetDummyServiceIPAndPort(clientset *kubernetes.Clientset, ctx context.Context, namespace string) (string, int32) {
+	dummyService, err := clientset.CoreV1().Services(namespace).Get(ctx, "dummy-service", metav1.GetOptions{})
+
+	if err != nil {
+		klog.ErrorS(err, "failed to get dummy service")
+	} else {
+		klog.Info("dummy service found", dummyService.Spec.ClusterIP)
+	}
+
+	return dummyService.Spec.ClusterIP, dummyService.Spec.Ports[0].Port
+}
