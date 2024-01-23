@@ -12,7 +12,6 @@ import (
 func main() {
 	klog.Infof("Starting file handler...")
 
-	// the corresponding fasthttp code
 	m := func(ctx *fasthttp.RequestCtx) {
 		switch string(ctx.Path()) {
 		case "/upload":
@@ -22,7 +21,13 @@ func main() {
 		}
 	}
 
-	err := fasthttp.ListenAndServe(":8080", m)
+	s := &fasthttp.Server{
+		Handler:            m,
+		Name:               "File handler",
+		MaxRequestBodySize: 4 * 1024 * 1024 * 1024,
+	}
+
+	err := s.ListenAndServe(":8080")
 	if err != nil {
 		klog.ErrorS(err, "Failed to start file handler.")
 	}
@@ -44,16 +49,19 @@ func handleFile(ctx *fasthttp.RequestCtx) {
 			ctx.Error("Failed to open file", fasthttp.StatusInternalServerError)
 			return
 		}
+		defer opened.Close()
 
-		bytes, err := io.ReadAll(opened)
+		destinationPath := "/mnt/data/" + file.Filename
+		dstFile, err := os.Create(destinationPath)
 		if err != nil {
-			ctx.Error("Failed to read file", fasthttp.StatusInternalServerError)
+			ctx.Error("Failed to create destination file", fasthttp.StatusInternalServerError)
 			return
 		}
+		defer dstFile.Close()
 
-		err = os.WriteFile("/mnt/data/"+file.Filename, bytes, 0644)
+		_, err = io.Copy(dstFile, opened)
 		if err != nil {
-			ctx.Error("Failed to write file", fasthttp.StatusInternalServerError)
+			ctx.Error("Failed to copy file contents", fasthttp.StatusInternalServerError)
 			return
 		}
 
