@@ -26,23 +26,23 @@ func (r *LiveMigrationReconciler) MigrateCheckpoint(ctx context.Context, directo
 		klog.ErrorS(err, "failed to read dir", "dir", directory)
 		return err
 	} else {
-		klog.Info("[INFO] ", "files in dir: ", files)
+		klog.Info("[INFO] files in dir: ", files)
 	}
 
 	dummyIp, dummyPort := dummy.GetDummyServiceIPAndPort(clientset, ctx, namespace)
-	klog.Info("[INFO] ", "dummyIp: ", dummyIp, "port: ", dummyPort)
+	klog.Info("[INFO] ", "dummyIp: ", dummyIp, ", port: ", dummyPort)
 
 	for _, file := range files {
 
 		checkpointPath := filepath.Join(directory, file.Name())
-		klog.Info("[INFO] ", "checkpointPath: ", checkpointPath)
+		klog.Info("[INFO] checkpointPath: ", checkpointPath)
 
 		chmodCmd := exec.Command("sudo", "chmod", "+rwx", checkpointPath)
 		chmodOutput, err := chmodCmd.Output()
 		if err != nil {
 			klog.ErrorS(err, "failed to change permissions of checkpoint file", "checkpointPath", checkpointPath)
 		} else {
-			klog.Info("[INFO] ", "checkpoint file permissions changed: ", chmodOutput)
+			klog.Infof("[INFO] checkpoint file permissions changed: %s", chmodOutput)
 		}
 
 		postCmd := exec.Command("curl", "-X", "POST", "-F", fmt.Sprintf("file=@%s", checkpointPath), fmt.Sprintf("http://%s:%d/upload", dummyIp, dummyPort))
@@ -51,7 +51,7 @@ func (r *LiveMigrationReconciler) MigrateCheckpoint(ctx context.Context, directo
 		if err != nil {
 			klog.ErrorS(err, "failed to post on the service", "service", "dummy-service")
 		} else {
-			klog.Info("[INFO] ", "service", "dummy-service", "out", string(postOut))
+			klog.Infof("[INFO] dummy-service %s", string(postOut))
 		}
 	}
 

@@ -132,7 +132,7 @@ func GetDummyServiceIPAndPort(clientset *kubernetes.Clientset, ctx context.Conte
 	if err != nil {
 		klog.ErrorS(err, "failed to get dummy service")
 	} else {
-		klog.Info("dummy service found", "service", dummyService.Spec.ClusterIP)
+		klog.Info("dummy service found", dummyService.Spec.ClusterIP)
 	}
 
 	return dummyService.Spec.ClusterIP, dummyService.Spec.Ports[0].Port
