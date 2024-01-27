@@ -10,7 +10,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/coocood/freecache"
 	"github.com/fsnotify/fsnotify"
 	"k8s.io/client-go/rest"
 
@@ -30,9 +29,6 @@ type LiveMigrationReconciler struct {
 	client.Client
 	Scheme *run.Scheme
 }
-
-var cacheSize = 100 * 1024 * 1024 // 100MB
-var fileCache = freecache.NewCache(cacheSize)
 
 // LiveMigrationReconciler reconciles a LiveMigration object
 
@@ -272,6 +268,10 @@ func (r *LiveMigrationReconciler) updateAnnotations(ctx context.Context, pod *co
 	return nil
 }
 
+// processFile processes the given file and returns a list of containers, pod name, or an error.
+//
+// It takes a file of type os.DirEntry and a path of type string as parameters.
+// It returns a list of corev1.Container, a string, and an error.
 func processFile(file os.DirEntry, path string) ([]corev1.Container, string, error) {
 	// Check if file is a dummy file
 	if file.Name() == "dummy" {
