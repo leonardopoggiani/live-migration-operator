@@ -30,7 +30,7 @@ func CreateDummyPod(clientset *kubernetes.Clientset, ctx context.Context, namesp
 				Containers: []corev1.Container{
 					{
 						Name:            "dummy-container",
-						Image:           "docker.io/leonardopoggiani/file-handler:latest",
+						Image:           "docker.io/leonardopoggiani/file-handler:v1.0.1",
 						ImagePullPolicy: "Always",
 						Ports: []corev1.ContainerPort{
 							{

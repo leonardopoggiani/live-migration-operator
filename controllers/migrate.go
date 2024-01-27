@@ -56,6 +56,46 @@ func (r *LiveMigrationReconciler) MigrateCheckpoint(ctx context.Context, directo
 	return nil
 }
 
+func (r *LiveMigrationReconciler) MigrateDummyFile(ctx context.Context, directory string, clientset *kubernetes.Clientset, namespace string) error {
+	files, err := os.ReadDir(directory)
+	if err != nil {
+		klog.ErrorS(err, "failed to read dir", "dir", directory)
+		return err
+	} else {
+		klog.Info("[INFO] files in dir: ", files)
+	}
+
+	utils.WaitForServiceReady(ctx, "dummy-service", namespace, clientset)
+	dummyIp, dummyPort := utils.GetDummyServiceIPAndPort(clientset, ctx, namespace)
+	klog.Info("[INFO] ", "dummyIp: ", dummyIp, ", port: ", dummyPort)
+
+	for _, file := range files {
+		if file.Name() == "dummy" {
+			dummyPath := filepath.Join(directory, file.Name())
+			klog.Info("[INFO] dummyPath: ", dummyPath)
+
+			chmodCmd := exec.Command("sudo", "chmod", "+rwx", dummyPath)
+			chmodOutput, err := chmodCmd.Output()
+			if err != nil {
+				klog.ErrorS(err, "failed to change permissions of dummy file", "dummyPath", dummyPath)
+			} else {
+				klog.Infof("[INFO] checkpoint file permissions changed: %s", chmodOutput)
+			}
+
+			postCmd := exec.Command("curl", "-X", "POST", "-F", fmt.Sprintf("file=@%s", dummyPath), fmt.Sprintf("http://%s:%d/upload", dummyIp, dummyPort))
+			klog.Info("[INFO] ", "cmd", postCmd.String())
+			postOut, err := postCmd.CombinedOutput()
+			if err != nil {
+				klog.ErrorS(err, "failed to post on the service", "service", "dummy-service")
+			} else {
+				klog.Infof("[INFO] dummy-service %s", string(postOut))
+			}
+		}
+	}
+
+	return nil
+}
+
 func (r *LiveMigrationReconciler) MigrateCheckpointParallelized(ctx context.Context, files []os.DirEntry, dir string, clientset *kubernetes.Clientset, namespace string) error {
 	// inside the worker function for uploading files
 	dummyIp, dummyPort := utils.GetDummyServiceIPAndPort(clientset, ctx, namespace)
