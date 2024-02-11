@@ -5,7 +5,6 @@ go 1.21.6
 require (
 	github.com/containers/buildah v1.34.0
 	github.com/containers/storage v1.51.1-0.20231204015418-15c3cb7881e4
-	github.com/coocood/freecache v1.2.4
 	github.com/emicklei/go-restful/v3 v3.11.2
 	github.com/fsnotify/fsnotify v1.7.0
 	k8s.io/api v0.29.0
@@ -107,7 +106,7 @@ require (
 	github.com/oklog/ulid v1.3.1 // indirect
 	github.com/opencontainers/go-digest v1.0.0 // indirect
 	github.com/opencontainers/image-spec v1.1.0-rc5 // indirect
-	github.com/opencontainers/runc v1.1.11 // indirect
+	github.com/opencontainers/runc v1.1.12 // indirect
 	github.com/opencontainers/runtime-spec v1.1.0 // indirect
 	github.com/opencontainers/runtime-tools v0.9.1-0.20230914150019-408c51e934dc // indirect
 	github.com/opencontainers/selinux v1.11.0 // indirect
