@@ -5,14 +5,13 @@ go 1.21.6
 require (
 	github.com/containers/buildah v1.34.0
 	github.com/containers/storage v1.51.1-0.20231204015418-15c3cb7881e4
-	github.com/coocood/freecache v1.2.4
 	github.com/emicklei/go-restful/v3 v3.11.2
 	github.com/fsnotify/fsnotify v1.7.0
 	k8s.io/api v0.29.0
 	k8s.io/apimachinery v0.29.0
 	k8s.io/client-go v0.29.0
 	k8s.io/klog/v2 v2.120.0
-	sigs.k8s.io/controller-runtime v0.16.3
+	sigs.k8s.io/controller-runtime v0.17.2
 )
 
 require (
