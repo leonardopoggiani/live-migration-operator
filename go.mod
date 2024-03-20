@@ -5,7 +5,6 @@ go 1.21.6
 require (
 	github.com/containers/buildah v1.34.0
 	github.com/containers/storage v1.51.1-0.20231204015418-15c3cb7881e4
-	github.com/coocood/freecache v1.2.4
 	github.com/emicklei/go-restful/v3 v3.11.2
 	github.com/fsnotify/fsnotify v1.7.0
 	k8s.io/api v0.29.0
@@ -47,7 +46,7 @@ require (
 	github.com/disiqueira/gotree/v3 v3.0.2 // indirect
 	github.com/distribution/reference v0.5.0 // indirect
 	github.com/docker/distribution v2.8.3+incompatible // indirect
-	github.com/docker/docker v24.0.7+incompatible // indirect
+	github.com/docker/docker v24.0.9+incompatible // indirect
 	github.com/docker/docker-credential-helpers v0.8.1 // indirect
 	github.com/docker/go-connections v0.5.0 // indirect
 	github.com/docker/go-units v0.5.0 // indirect
