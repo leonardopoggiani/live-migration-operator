@@ -5,7 +5,6 @@ go 1.21.6
 require (
 	github.com/containers/buildah v1.34.0
 	github.com/containers/storage v1.51.1-0.20231204015418-15c3cb7881e4
-	github.com/coocood/freecache v1.2.4
 	github.com/emicklei/go-restful/v3 v3.11.2
 	github.com/fsnotify/fsnotify v1.7.0
 	k8s.io/api v0.29.0
@@ -36,7 +35,7 @@ require (
 	github.com/containernetworking/cni v1.1.2 // indirect
 	github.com/containernetworking/plugins v1.4.0 // indirect
 	github.com/containers/common v0.57.1 // indirect
-	github.com/containers/image/v5 v5.29.1-0.20231120202631-293b00ba7166 // indirect
+	github.com/containers/image/v5 v5.29.3 // indirect
 	github.com/containers/libtrust v0.0.0-20230121012942-c1716e8a8d01 // indirect
 	github.com/containers/luksy v0.0.0-20240109152109-19414b4e5a86 // indirect
 	github.com/containers/ocicrypt v1.1.9 // indirect
